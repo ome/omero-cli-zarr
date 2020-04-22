@@ -44,6 +44,11 @@ class ZarrControl(BaseControl):
     parser.add_argument("image_id", type=int, help="The Image to export")
     parser.add_argument("target", type=str, help="The target directory")
 
+    parser.add_argument("--tile_width", default=None)
+    parser.add_argument("--tile_height", default=None)
+    parser.add_argument("--resolutions", default=None)
+    parser.add_argument("--max_workers", default=None)
+
     parser.set_defaults(func=self.export)
 
   @gateway_required
@@ -51,20 +56,31 @@ class ZarrControl(BaseControl):
     path, name = self._get_path(args.image_id)
 
     if path:
-      self._do_export(path, name, args.target)
+      self._do_export(path, name, args)
     else:
       print("Couldn't find managed repository path for this image.")
 
 
-  def _do_export(self, path, name, target_base):
+  def _do_export(self, path, name, args):
     abs_path = Path(os.environ['MANAGED_REPO']) / path / name
 
     bf2raw = Path(os.environ['BF2RAW'])
 
-    target = Path(target_base) / name
+    target = Path(args.target) / name
     target.mkdir(exist_ok=True)
 
-    process = subprocess.Popen(["bin/bioformats2raw", "--file_type=zarr", abs_path, target],
+    options = "--file_type=zarr"
+    if args.tile_width:
+      options += " --tile_width="+args.tile_width
+    if args.tile_height:
+      options += " --tile_height="+args.tile_height
+    if args.resolutions:
+      options += " --resolutions="+args.resolutions
+    if args.max_workers:
+      options += " --max_workers="+args.max_workers
+
+    print(options)
+    process = subprocess.Popen(["bin/bioformats2raw", options, abs_path, target],
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE,
                                cwd=bf2raw)
