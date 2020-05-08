@@ -8,15 +8,11 @@ from omero.rtypes import unwrap
 import numpy
 import zarr
 
-# Uses CLI login to load Image from OMERO and save as zarr:
-
-# $ python omero_to_zarr.py 123
-# will create 123.zarr
 
 def image_to_zarr(image, args):
 
     cache_numpy = args.cache_numpy
-    target_dir = args.target
+    target_dir = args.output
 
     size_c = image.getSizeC()
     size_z = image.getSizeZ()

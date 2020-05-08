@@ -48,7 +48,7 @@ class ZarrControl(BaseControl):
     ProxyStringType("Image")
     parser.add_argument("object", type=ProxyStringType("Image"),
       help="The Image to export.")
-    parser.add_argument("--target", type=str, default="", help="The target directory")
+    parser.add_argument("--output", type=str, default="", help="The output directory")
 
     parser.add_argument(
       "--cache_numpy", action="store_true",
@@ -97,7 +97,7 @@ class ZarrControl(BaseControl):
 
     bf2raw = Path(os.environ['BF2RAW'])
 
-    target = Path(args.target) / name
+    target = Path(args.output) / name
     target.mkdir(exist_ok=True)
 
     options = "--file_type=zarr"
