@@ -33,12 +33,12 @@ $ omero zarr Image:1 --output /home/user/zarr_files
 
 ```
 
-To export images via bioformats2raw:
+To export images via bioformats2raw we use the ```--bf``` flag:
 
 ```
 export MANAGED_REPO=/var/omero/data/ManagedRepository
 export BF2RAW=/opt/tools/bioformats2raw-0.2.0-SNAPSHOT
 
-$ omero zarr 1 --output /home/user/zarr_files
+$ omero zarr 1 --bf --output /home/user/zarr_files
 Image exported to /home/user/zarr_files/2chZT.lsm
 ```
