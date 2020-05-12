@@ -7,8 +7,12 @@ from functools import wraps
 import omero
 from omero.cli import BaseControl
 from omero.cli import CLI
+from omero.cli import ProxyStringType
 from omero.gateway import BlitzGateway
 from omero.rtypes import rlong
+from omero.model import ImageI
+
+from raw_pixels import image_to_zarr
 
 HELP = "Export an image in zarr format."
 
@@ -41,32 +45,59 @@ class ZarrControl(BaseControl):
   def _configure(self, parser):
     parser.add_login_arguments()
 
-    parser.add_argument("image_id", type=int, help="The Image to export")
-    parser.add_argument("target", type=str, help="The target directory")
+    ProxyStringType("Image")
+    parser.add_argument("object", type=ProxyStringType("Image"),
+      help="The Image to export.")
+    parser.add_argument("--output", type=str, default="", help="The output directory")
 
-    parser.add_argument("--tile_width", default=None)
-    parser.add_argument("--tile_height", default=None)
-    parser.add_argument("--resolutions", default=None)
-    parser.add_argument("--max_workers", default=None)
+    parser.add_argument(
+      "--cache_numpy", action="store_true",
+      help="Save planes as .npy files in case of connection loss")
+
+    parser.add_argument("--bf", action="store_true",
+                        help="Use bioformats2raw to read from managed repo")
+    parser.add_argument("--tile_width", default=None,
+                        help="For use with bioformats2raw")
+    parser.add_argument("--tile_height", default=None,
+                        help="For use with bioformats2raw")
+    parser.add_argument("--resolutions", default=None,
+                        help="For use with bioformats2raw")
+    parser.add_argument("--max_workers", default=None,
+                        help="For use with bioformats2raw")
 
     parser.set_defaults(func=self.export)
 
   @gateway_required
   def export(self, args):
-    path, name = self._get_path(args.image_id)
 
-    if path:
-      self._do_export(path, name, args)
-    else:
-      print("Couldn't find managed repository path for this image.")
+    if isinstance(args.object, ImageI):
+      image_id = args.object.id
+      image = self._lookup(self.gateway, "Image", image_id)
+      self.ctx.out("Export image: %s" % image.name)
 
+      if args.bf:
+        path, name = self._get_path(image_id)
+        if path:
+          self._do_export(path, name, args)
+        else:
+          print("Couldn't find managed repository path for this image.")
+      else:
+        image_to_zarr(image, args)
+
+  def _lookup(self, gateway, type, oid):
+        """Find object of type by ID."""
+        gateway.SERVICE_OPTS.setOmeroGroup("-1")
+        obj = gateway.getObject(type, oid)
+        if not obj:
+            self.ctx.die(110, "No such %s: %s" % (type, oid))
+        return obj
 
   def _do_export(self, path, name, args):
     abs_path = Path(os.environ['MANAGED_REPO']) / path / name
 
     bf2raw = Path(os.environ['BF2RAW'])
 
-    target = Path(args.target) / name
+    target = Path(args.output) / name
     target.mkdir(exist_ok=True)
 
     options = "--file_type=zarr"
