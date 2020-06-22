@@ -81,8 +81,6 @@ def masks_to_zarr(masks, image):
             # ADD to the array, so zeros in our binarray don't wipe out previous masks
             labels[t, z, y:(y+h), x:(x+w)] += (binarray * (count))
 
-    print(labels)
-    print(labels.min(), labels.max())
     return labels
 
 
