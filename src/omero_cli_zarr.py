@@ -13,8 +13,10 @@ from omero.rtypes import rlong
 from omero.model import ImageI
 
 from raw_pixels import image_to_zarr
+from masks import image_masks_to_zarr
 
 HELP = "Export an image in zarr format."
+MASKS_HELP = "Export ROI Masks on the Image in zarr format."
 
 def gateway_required(func):
   """
@@ -46,8 +48,8 @@ class ZarrControl(BaseControl):
     parser.add_login_arguments()
 
     ProxyStringType("Image")
-    parser.add_argument("object", type=ProxyStringType("Image"),
-      help="The Image to export.")
+    # parser.add_argument("object", type=ProxyStringType("Image"),
+    #   help="The Image to export.")
     parser.add_argument("--output", type=str, default="", help="The output directory")
 
     parser.add_argument(
@@ -65,7 +67,22 @@ class ZarrControl(BaseControl):
     parser.add_argument("--max_workers", default=None,
                         help="For use with bioformats2raw")
 
-    parser.set_defaults(func=self.export)
+    # Subcommands
+    sub = parser.sub()
+    masks = parser.add(sub, self.masks, MASKS_HELP)
+    masks.add_argument("object", type=ProxyStringType("Image"),
+      help="The Image to export.")
+
+    # parser.set_defaults(func=self.export)
+
+  @gateway_required
+  def masks(self, args):
+    """Export masks on the Image as zarr files."""
+    if isinstance(args.object, ImageI):
+      image_id = args.object.id
+      image = self._lookup(self.gateway, "Image", image_id)
+      self.ctx.out("Export Masks on Image: %s" % image.name)
+      image_masks_to_zarr(image, args)
 
   @gateway_required
   def export(self, args):
