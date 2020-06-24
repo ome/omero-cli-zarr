@@ -163,7 +163,11 @@ class ZarrControl(BaseControl):
             print("Image exported to {}".format(target))
 
     def _get_path(self, image_id):
-        query = "select org from Image i left outer join i.fileset as fs left outer join fs.usedFiles as uf left outer join uf.originalFile as org where i.id = :iid"
+        query = """
+        select org from Image i left outer join i.fileset as fs left
+        outer join fs.usedFiles as uf left outer join uf.originalFile as org
+        where i.id = :iid
+        """
         qs = self.client.sf.getQueryService()
         params = omero.sys.Parameters()
         params.map = {"iid": rlong(image_id)}

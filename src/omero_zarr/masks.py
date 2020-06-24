@@ -1,8 +1,4 @@
-import argparse
-import sys
-import os
-
-import omero.clients
+import omero.clients  # noqa
 from omero.model import MaskI
 from omero.rtypes import unwrap
 import numpy as np
@@ -11,13 +7,8 @@ import zarr
 
 def image_masks_to_zarr(image, args):
 
-    target_dir = args.output
-
-    size_c = image.getSizeC()
-    size_z = image.getSizeZ()
     size_x = image.getSizeX()
     size_y = image.getSizeY()
-    size_t = image.getSizeT()
 
     conn = image._conn
     roi_service = conn.getRoiService()
@@ -77,7 +68,8 @@ def masks_to_zarr(masks, image):
             binarray = np.unpackbits(intarray)
             # truncate and reshape
             binarray = np.reshape(binarray[: (w * h)], (h, w))
-            # ADD to the array, so zeros in our binarray don't wipe out previous masks
+            # ADD to the array, so zeros in our binarray don't wipe out
+            # previous masks
             labels[t, z, y : (y + h), x : (x + w)] += binarray * (count)
 
     return labels

@@ -1,8 +1,6 @@
-import argparse
-import sys
 import os
 
-import omero.clients
+import omero.clients  # noqa
 from omero.rtypes import unwrap
 import numpy
 import zarr
