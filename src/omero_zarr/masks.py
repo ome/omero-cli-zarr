@@ -14,6 +14,14 @@ DIMENSION_ORDER = {
     "X": 4,
 }
 
+MASK_DTYPE_SIZE = {
+    2: np.bool,
+    8: np.int8,
+    16: np.int16,
+    32: np.int32,
+    64: np.int64,
+}
+
 
 def image_masks_to_zarr(image, args):
 
@@ -35,17 +43,19 @@ def image_masks_to_zarr(image, args):
 
     print(f"Found {shape_count} mask shapes in {len(masks)} ROIs")
 
+    dtype = MASK_DTYPE_SIZE[int(args.mask_bits)]
+
     if masks:
         if args.group_rois:
             for (roi_id, roi) in masks.items():
-                _save_masks([roi], image, str(roi_id))
+                _save_masks([roi], image, str(roi_id), dtype)
         else:
-            _save_masks(masks.values(), image, "0")
+            _save_masks(masks.values(), image, "0", dtype)
     else:
         print("No masks found on Image")
 
 
-def _save_masks(masks, image, roi_name):
+def _save_masks(masks, image, roi_name, dtype):
     size_t = image.getSizeT()
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -86,7 +96,7 @@ def _save_masks(masks, image, roi_name):
         roi_name,
         shape=mask_shape,
         chunks=(1, 1, 1, size_y, size_x),
-        dtype=np.int16,
+        dtype=dtype,
         overwrite=True,
     )
     masks_to_labels(
@@ -152,33 +162,6 @@ def _get_indicies(ignored_dimensions, d, d_value, d_size):
     if d_value is not None:
         return [d_value]
     return range(d_size)
-
-
-def mask_to_binim(mask, mask_shape, ignored_dimensions):
-    """
-    :param mask MaskI: An OMERO mask
-    :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
-           into account `ignored_dimensions`
-    :param ignored_dimensions set(char): Ignore these dimensions and set size
-           to 1
-
-    :return: Binary mask with the same dimensions as the image
-             If `T`, `C` or `Z` are not set on the mask the mask is expanded to
-             all planes in that dimension
-
-    TODO: Move to https://github.com/ome/omero-rois/
-    """
-    size_t, size_c, size_z, size_y, size_x = mask_shape
-
-    binim = np.zeros(mask_shape, np.bool)
-    binim_yx, (t, c, z, y, x, h, w) = _mask_to_binim_yx(mask)
-
-    for i_t in _get_indicies(ignored_dimensions, "T", t, size_t):
-        for i_c in _get_indicies(ignored_dimensions, "C", c, size_c):
-            for i_z in _get_indicies(ignored_dimensions, "Z", z, size_z):
-                binim[i_t, i_c, i_z, y : (y + h), x : (x + w)] = binim_yx
-
-    return binim
 
 
 def masks_to_labels(
