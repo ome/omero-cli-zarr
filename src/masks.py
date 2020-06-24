@@ -82,21 +82,3 @@ def masks_to_zarr(masks, image):
             labels[t, z, y:(y+h), x:(x+w)] += (binarray * (count))
 
     return labels
-
-
-# def add_group_metadata(zarr_root, image, resolutions=1):
-
-#     image_data = {
-#         'id': 1,
-#         'channels': [channelMarshal(c) for c in image.getChannels()],
-#         'rdefs': {'model': (image.isGreyscaleRenderingModel() and
-#                                      'greyscale' or 'color'),
-#                            'defaultZ': image._re.getDefaultZ(),
-#                            'defaultT': image._re.getDefaultT()}
-#     }
-#     multiscales = [{
-#         "version": "0.1",
-#         "datasets": [{'path': str(r)} for r in range(resolutions)],
-#     }]
-#     zarr_root.attrs["multiscales"] = multiscales
-#     zarr_root.attrs["omero"] = image_data
