@@ -12,8 +12,8 @@ from omero.gateway import BlitzGateway
 from omero.rtypes import rlong
 from omero.model import ImageI
 
-from raw_pixels import image_to_zarr
-from masks import image_masks_to_zarr
+from .raw_pixels import image_to_zarr
+from .masks import image_masks_to_zarr
 
 HELP = "Export data in zarr format."
 EXPORT_HELP = "Export an image in zarr format."
