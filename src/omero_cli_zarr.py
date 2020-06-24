@@ -48,7 +48,6 @@ class ZarrControl(BaseControl):
   def _configure(self, parser):
     parser.add_login_arguments()
 
-    ProxyStringType("Image")
     parser.add_argument("--output", type=str, default="", help="The output directory")
 
     parser.add_argument(
@@ -70,7 +69,7 @@ class ZarrControl(BaseControl):
     sub = parser.sub()
     masks = parser.add(sub, self.masks, MASKS_HELP)
     masks.add_argument("object", type=ProxyStringType("Image"),
-      help="The Image to export Masks.")
+      help="The Image from which to export Masks.")
 
     export = parser.add(sub, self.export, EXPORT_HELP)
     export.add_argument("object", type=ProxyStringType("Image"),
