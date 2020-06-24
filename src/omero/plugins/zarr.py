@@ -1,2 +1,2 @@
-from omero_cli_zarr import ZarrControl, HELP
+from omero_zarr.cli import ZarrControl, HELP
 register("zarr", ZarrControl, HELP)
