@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 import os
@@ -34,17 +33,17 @@ def image_masks_to_zarr(image, args):
         if len(mask_shapes) > 0:
             masks[roi.id.val] = mask_shapes
 
-    print(f'Found {len(masks)} masks')
+    print(f"Found {len(masks)} masks")
 
     if masks:
         stack = masks_to_zarr(masks, image)
-        name = f'{image.id}_masks.zarr'
-        root = zarr.open_group(name, mode='w')
+        name = f"{image.id}_masks.zarr"
+        root = zarr.open_group(name, mode="w")
         za = root.create(
-            '0',
+            "0",
             shape=stack.shape,
             chunks=(1, 1, size_y, size_x),
-            dtype=stack.dtype
+            dtype=stack.dtype,
         )
 
         za[:, :, :, :] = stack
@@ -77,8 +76,8 @@ def masks_to_zarr(masks, image):
             intarray = np.fromstring(mask_packed, dtype=np.uint8)
             binarray = np.unpackbits(intarray)
             # truncate and reshape
-            binarray = np.reshape(binarray[:(w * h)], (h, w))
+            binarray = np.reshape(binarray[: (w * h)], (h, w))
             # ADD to the array, so zeros in our binarray don't wipe out previous masks
-            labels[t, z, y:(y+h), x:(x+w)] += (binarray * (count))
+            labels[t, z, y : (y + h), x : (x + w)] += binarray * (count)
 
     return labels

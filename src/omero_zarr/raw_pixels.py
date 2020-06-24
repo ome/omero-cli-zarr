@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 import os
@@ -22,8 +21,10 @@ def image_to_zarr(image, args):
 
     # dir for caching .npy planes
     if cache_numpy:
-        os.makedirs(os.path.join(target_dir, str(image.id)), mode=511, exist_ok=True)
-    name = os.path.join(target_dir, '%s.zarr' % image.id)
+        os.makedirs(
+            os.path.join(target_dir, str(image.id)), mode=511, exist_ok=True
+        )
+    name = os.path.join(target_dir, "%s.zarr" % image.id)
     za = None
     pixels = image.getPrimaryPixels()
 
@@ -33,10 +34,12 @@ def image_to_zarr(image, args):
             for z in range(size_z):
                 # We only want to load from server if not cached locally
                 filename = os.path.join(
-                    target_dir, str(image.id),
-                    '{:03d}-{:03d}-{:03d}.npy'.format(z, c, t))
+                    target_dir,
+                    str(image.id),
+                    "{:03d}-{:03d}-{:03d}.npy".format(z, c, t),
+                )
                 if not os.path.exists(filename):
-                    zct_list.append( (z,c,t) )
+                    zct_list.append((z, c, t))
 
     def planeGen():
         planes = pixels.getPlanes(zct_list)
@@ -49,26 +52,28 @@ def image_to_zarr(image, args):
         for c in range(size_c):
             for z in range(size_z):
                 filename = os.path.join(
-                    target_dir, str(image.id),
-                    '{:03d}-{:03d}-{:03d}.npy'.format(z, c, t))
+                    target_dir,
+                    str(image.id),
+                    "{:03d}-{:03d}-{:03d}.npy".format(z, c, t),
+                )
                 if os.path.exists(filename):
-                    print(f'plane (from disk) c:{c}, t:{t}, z:{z}')
+                    print(f"plane (from disk) c:{c}, t:{t}, z:{z}")
                     plane = numpy.load(filename)
                 else:
-                    print(f'loading plane c:{c}, t:{t}, z:{z}')
+                    print(f"loading plane c:{c}, t:{t}, z:{z}")
                     plane = next(planes)
                     if cache_numpy:
-                        print(f'cached at {filename}')
+                        print(f"cached at {filename}")
                         numpy.save(filename, plane)
                 if za is None:
                     # store = zarr.NestedDirectoryStore(name)
                     # root = zarr.group(store=store, overwrite=True)
-                    root = zarr.open_group(name, mode='w')
+                    root = zarr.open_group(name, mode="w")
                     za = root.create(
-                        '0',
+                        "0",
                         shape=(size_t, size_c, size_z, size_y, size_x),
                         chunks=(1, 1, 1, size_y, size_x),
-                        dtype=plane.dtype
+                        dtype=plane.dtype,
                     )
                 za[t, c, z, :, :] = plane
         add_group_metadata(root, image)
@@ -78,29 +83,38 @@ def image_to_zarr(image, args):
 def add_group_metadata(zarr_root, image, resolutions=1):
 
     image_data = {
-        'id': 1,
-        'channels': [channelMarshal(c) for c in image.getChannels()],
-        'rdefs': {'model': (image.isGreyscaleRenderingModel() and
-                                     'greyscale' or 'color'),
-                           'defaultZ': image._re.getDefaultZ(),
-                           'defaultT': image._re.getDefaultT()}
+        "id": 1,
+        "channels": [channelMarshal(c) for c in image.getChannels()],
+        "rdefs": {
+            "model": (
+                image.isGreyscaleRenderingModel() and "greyscale" or "color"
+            ),
+            "defaultZ": image._re.getDefaultZ(),
+            "defaultT": image._re.getDefaultT(),
+        },
     }
-    multiscales = [{
-        "version": "0.1",
-        "datasets": [{'path': str(r)} for r in range(resolutions)],
-    }]
+    multiscales = [
+        {
+            "version": "0.1",
+            "datasets": [{"path": str(r)} for r in range(resolutions)],
+        }
+    ]
     zarr_root.attrs["multiscales"] = multiscales
     zarr_root.attrs["omero"] = image_data
 
 
 def channelMarshal(channel):
-    return {'label': channel.getLabel(),
-            'color': channel.getColor().getHtml(),
-            'inverted': channel.isInverted(),
-            'family': unwrap(channel.getFamily()),
-            'coefficient': unwrap(channel.getCoefficient()),
-            'window': {'min': channel.getWindowMin(),
-                       'max': channel.getWindowMax(),
-                       'start': channel.getWindowStart(),
-                       'end': channel.getWindowEnd()},
-            'active': channel.isActive()}
+    return {
+        "label": channel.getLabel(),
+        "color": channel.getColor().getHtml(),
+        "inverted": channel.isInverted(),
+        "family": unwrap(channel.getFamily()),
+        "coefficient": unwrap(channel.getCoefficient()),
+        "window": {
+            "min": channel.getWindowMin(),
+            "max": channel.getWindowMax(),
+            "start": channel.getWindowStart(),
+            "end": channel.getWindowEnd(),
+        },
+        "active": channel.isActive(),
+    }
