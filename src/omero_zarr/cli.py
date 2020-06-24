@@ -87,6 +87,11 @@ class ZarrControl(BaseControl):
             type=ProxyStringType("Image"),
             help="The Image from which to export Masks.",
         )
+        masks.add_argument(
+            "--group-rois",
+            action="store_true",
+            help="Store each ROI in a separate group.",
+        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(

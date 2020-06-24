@@ -17,18 +17,12 @@ DIMENSION_ORDER = {
 
 def image_masks_to_zarr(image, args):
 
-    size_t = image.getSizeT()
-    size_c = image.getSizeC()
-    size_z = image.getSizeZ()
-    size_y = image.getSizeY()
-    size_x = image.getSizeX()
-    image_shape = (size_t, size_c, size_z, size_y, size_x)
-
     conn = image._conn
     roi_service = conn.getRoiService()
     result = roi_service.findByImage(image.id, None)
 
     masks = {}
+    shape_count = 0
     for roi in result.rois:
         mask_shapes = []
         for s in roi.copyShapes():
@@ -37,75 +31,85 @@ def image_masks_to_zarr(image, args):
 
         if len(mask_shapes) > 0:
             masks[roi.id.val] = mask_shapes
+            shape_count += len(mask_shapes)
 
-    print(f"Found {len(masks)} masks")
+    print(f"Found {shape_count} mask shapes in {len(masks)} ROIs")
 
     if masks:
-        # Figure out whether we can flatten some dimensions
-        unique_dims = {
-            "T": set(),
-            "C": set(),
-            "Z": set(),
-        }
-        for shapes in masks.values():
-            for mask in shapes:
-                unique_dims["T"].add(unwrap(mask.theT))
-                unique_dims["C"].add(unwrap(mask.theC))
-                unique_dims["Z"].add(unwrap(mask.theZ))
-        ignored_dimensions = set()
-        print(unique_dims)
-        for d in "TCZ":
-            if unique_dims[d] == {None}:
-                ignored_dimensions.add(d)
-
-        name = f"{image.id}.zarr"
-        root = zarr.open(name)
-        if "masks" in root.group_keys():
-            out_masks = root.masks
+        if args.group_rois:
+            for (roi_id, roi) in masks.items():
+                _save_masks([roi], image, str(roi_id))
         else:
-            out_masks = root.create_group("masks")
-
-        mask_shape = list(image_shape)
-        for d in ignored_dimensions:
-            mask_shape[DIMENSION_ORDER[d]] = 1
-        print("Ignoring dimensions {}".format(ignored_dimensions))
-
-        # TODO: Make each ROI a separate group and use Roi.id as name?
-        roi_name = "0"
-        za = out_masks.create_dataset(
-            roi_name,
-            shape=mask_shape,
-            chunks=(1, 1, 1, size_y, size_x),
-            dtype=np.int16,
-            overwrite=True,
-        )
-        masks_to_labels(
-            masks,
-            mask_shape,
-            ignored_dimensions,
-            check_overlaps=True,
-            labels=za,
-        )
-
-        # Setting za.attrs[] doesn't work, so go via parent
-        if "0" in root:
-            image_name = "0"
-        else:
-            image_name = "omero://{}.zarr".format(image.id)
-        out_masks[roi_name].attrs["image"] = {
-            "array": image_name,
-            "source": {
-                # 'ts': [],
-                # 'cs': [],
-                # 'zs': [],
-                # 'ys': [],
-                # 'xs': [],
-            },
-        }
-
-        print("Created {}/{}".format(name, roi_name))
+            _save_masks(masks.values(), image, "0")
     else:
         print("No masks found on Image")
+
+
+def _save_masks(masks, image, roi_name):
+    size_t = image.getSizeT()
+    size_c = image.getSizeC()
+    size_z = image.getSizeZ()
+    size_y = image.getSizeY()
+    size_x = image.getSizeX()
+    image_shape = (size_t, size_c, size_z, size_y, size_x)
+
+    # Figure out whether we can flatten some dimensions
+    unique_dims = {
+        "T": set(),
+        "C": set(),
+        "Z": set(),
+    }
+    for shapes in masks:
+        for mask in shapes:
+            unique_dims["T"].add(unwrap(mask.theT))
+            unique_dims["C"].add(unwrap(mask.theC))
+            unique_dims["Z"].add(unwrap(mask.theZ))
+    ignored_dimensions = set()
+    print(unique_dims)
+    for d in "TCZ":
+        if unique_dims[d] == {None}:
+            ignored_dimensions.add(d)
+
+    name = f"{image.id}.zarr"
+    root = zarr.open(name)
+    if "masks" in root.group_keys():
+        out_masks = root.masks
+    else:
+        out_masks = root.create_group("masks")
+
+    mask_shape = list(image_shape)
+    for d in ignored_dimensions:
+        mask_shape[DIMENSION_ORDER[d]] = 1
+    print("Ignoring dimensions {}".format(ignored_dimensions))
+
+    za = out_masks.create_dataset(
+        roi_name,
+        shape=mask_shape,
+        chunks=(1, 1, 1, size_y, size_x),
+        dtype=np.int16,
+        overwrite=True,
+    )
+    masks_to_labels(
+        masks, mask_shape, ignored_dimensions, check_overlaps=True, labels=za,
+    )
+
+    # Setting za.attrs[] doesn't work, so go via parent
+    if "0" in root:
+        image_name = "0"
+    else:
+        image_name = "omero://{}.zarr".format(image.id)
+    out_masks[roi_name].attrs["image"] = {
+        "array": image_name,
+        "source": {
+            # 'ts': [],
+            # 'cs': [],
+            # 'zs': [],
+            # 'ys': [],
+            # 'xs': [],
+        },
+    }
+
+    print("Created {}/masks/{}".format(name, roi_name))
 
 
 def _mask_to_binim_yx(mask):
@@ -218,7 +222,7 @@ def masks_to_labels(
             labels.shape, mask_shape
         )
 
-    for count, shapes in enumerate(masks.values()):
+    for count, shapes in enumerate(masks):
         # All shapes same color for each ROI
         print(count)
         for mask in shapes:
