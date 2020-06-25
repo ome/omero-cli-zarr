@@ -46,7 +46,7 @@ def image_masks_to_zarr(image, args):
     dtype = MASK_DTYPE_SIZE[int(args.mask_bits)]
 
     if masks:
-        if args.group_rois:
+        if args.split_masks:
             for (roi_id, roi) in masks.items():
                 _save_masks([roi], image, str(roi_id), dtype)
         else:
@@ -105,7 +105,7 @@ def _save_masks(masks, image, roi_name, dtype):
 
     # Setting za.attrs[] doesn't work, so go via parent
     if "0" in root:
-        image_name = "0"
+        image_name = "../../0"
     else:
         image_name = "omero://{}.zarr".format(image.id)
     out_masks[roi_name].attrs["image"] = {
@@ -192,7 +192,7 @@ def masks_to_labels(
 
     if not labels:
         # TODO: Set np.int size based on number of labels
-        labels = np.zeros(mask_shape, np.int16)
+        labels = np.zeros(mask_shape, np.int64)
 
     for d in "TCZYX":
         if d in ignored_dimensions:

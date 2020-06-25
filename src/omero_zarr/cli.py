@@ -88,9 +88,12 @@ class ZarrControl(BaseControl):
             help="The Image from which to export Masks.",
         )
         masks.add_argument(
-            "--group-rois",
+            "--split-masks",
             action="store_true",
-            help="Store each ROI in a separate group.",
+            help=(
+                "Store each ROI in a separate group, required if masks "
+                "overlap"
+            ),
         )
         masks.add_argument(
             "--mask-bits",
