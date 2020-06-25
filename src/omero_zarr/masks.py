@@ -153,7 +153,7 @@ def _mask_to_binim_yx(mask):
     return binarray, (t, c, z, y, x, h, w)
 
 
-def _get_indicies(ignored_dimensions, d, d_value, d_size):
+def _get_indices(ignored_dimensions, d, d_value, d_size):
     """
     Figures out which Z/C/T-planes a mask should be copied to
     """
@@ -210,9 +210,9 @@ def masks_to_labels(
         print(count)
         for mask in shapes:
             binim_yx, (t, c, z, y, x, h, w) = _mask_to_binim_yx(mask)
-            for i_t in _get_indicies(ignored_dimensions, "T", t, size_t):
-                for i_c in _get_indicies(ignored_dimensions, "C", c, size_c):
-                    for i_z in _get_indicies(
+            for i_t in _get_indices(ignored_dimensions, "T", t, size_t):
+                for i_c in _get_indices(ignored_dimensions, "C", c, size_c):
+                    for i_z in _get_indices(
                         ignored_dimensions, "Z", z, size_z
                     ):
                         if check_overlaps and np.any(
