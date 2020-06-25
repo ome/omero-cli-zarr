@@ -15,7 +15,7 @@ DIMENSION_ORDER = {
 }
 
 MASK_DTYPE_SIZE = {
-    2: np.bool,
+    1: np.bool,
     8: np.int8,
     16: np.int16,
     32: np.int32,

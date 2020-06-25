@@ -97,7 +97,7 @@ class ZarrControl(BaseControl):
             default=str(max(MASK_DTYPE_SIZE.keys())),
             choices=[str(s) for s in sorted(MASK_DTYPE_SIZE.keys())],
             help=(
-                "Integer bit size for each mask pixel, use 2 for a binary "
+                "Integer bit size for each mask pixel, use 1 for a binary "
                 "mask, default %(default)s"
             ),
         )
