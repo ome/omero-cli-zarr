@@ -100,8 +100,12 @@ def _save_masks(masks, image, roi_name, dtype):
         overwrite=True,
     )
     masks_to_labels(
-        masks, mask_shape, dtype,
-        ignored_dimensions, check_overlaps=True, labels=za,
+        masks,
+        mask_shape,
+        dtype,
+        ignored_dimensions,
+        check_overlaps=True,
+        labels=za,
     )
 
     # Setting za.attrs[] doesn't work, so go via parent
