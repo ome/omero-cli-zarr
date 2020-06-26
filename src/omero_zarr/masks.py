@@ -100,7 +100,8 @@ def _save_masks(masks, image, roi_name, dtype):
         overwrite=True,
     )
     masks_to_labels(
-        masks, mask_shape, ignored_dimensions, check_overlaps=True, labels=za,
+        masks, mask_shape, dtype,
+        ignored_dimensions, check_overlaps=True, labels=za,
     )
 
     # Setting za.attrs[] doesn't work, so go via parent
@@ -122,9 +123,10 @@ def _save_masks(masks, image, roi_name, dtype):
     print("Created {}/masks/{}".format(name, roi_name))
 
 
-def _mask_to_binim_yx(mask):
+def _mask_to_binim_yx(mask, dtype):
     """
     :param mask MaskI: An OMERO mask
+    :param dtype Expected type of the output
 
     :return: tuple of
             - Binary mask
@@ -146,7 +148,7 @@ def _mask_to_binim_yx(mask):
     mask_packed = mask.getBytes()
     # convert bytearray into something we can use
     intarray = np.fromstring(mask_packed, dtype=np.uint8)
-    binarray = np.unpackbits(intarray)
+    binarray = np.unpackbits(intarray).astype(dtype)
     # truncate and reshape
     binarray = np.reshape(binarray[: (w * h)], (h, w))
 
@@ -167,6 +169,7 @@ def _get_indices(ignored_dimensions, d, d_value, d_size):
 def masks_to_labels(
     masks,
     mask_shape,
+    dtype,
     ignored_dimensions=None,
     check_overlaps=True,
     labels=None,
@@ -175,6 +178,7 @@ def masks_to_labels(
     :param masks [MaskI]: Iterable container of OMERO masks
     :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
            into account `ignored_dimensions`
+    :param dtype Expected type of the converted masks
     :param ignored_dimensions set(char): Ignore these dimensions and set size
            to 1
     :param check_overlaps bool: Whether to check for overlapping masks or not
@@ -209,7 +213,7 @@ def masks_to_labels(
         # All shapes same color for each ROI
         print(count)
         for mask in shapes:
-            binim_yx, (t, c, z, y, x, h, w) = _mask_to_binim_yx(mask)
+            binim_yx, (t, c, z, y, x, h, w) = _mask_to_binim_yx(mask, dtype)
             for i_t in _get_indices(ignored_dimensions, "T", t, size_t):
                 for i_c in _get_indices(ignored_dimensions, "C", c, size_c):
                     for i_z in _get_indices(
@@ -231,7 +235,7 @@ def masks_to_labels(
                         # ADD to the array, so zeros in our binarray don't
                         # wipe out previous masks
                         labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
-                            binim_yx * count
+                            binim_yx * (count + 1)  # Prevent zeroing
                         )
 
     return labels
