@@ -22,14 +22,14 @@ To export images via the OMERO API:
 
 ```
 # Image will be saved in current directory as 1.zarr
-$ omero zarr Image:1
+$ omero zarr export Image:1
 
 # Specify an output directory
-$ omero zarr Image:1 --output /home/user/zarr_files
+$ omero zarr export Image:1 --output /home/user/zarr_files
 
 # Cache each plane as a numpy file.npy. If connection is lost, and you need
 # to export again, we can use these instead of downloading again
-# omero zarr Image:1 --cache_numpy
+# omero zarr export Image:1 --cache_numpy
 
 ```
 
@@ -39,6 +39,13 @@ To export images via bioformats2raw we use the ```--bf``` flag:
 export MANAGED_REPO=/var/omero/data/ManagedRepository
 export BF2RAW=/opt/tools/bioformats2raw-0.2.0-SNAPSHOT
 
-$ omero zarr 1 --bf --output /home/user/zarr_files
+$ omero zarr export 1 --bf --output /home/user/zarr_files
 Image exported to /home/user/zarr_files/2chZT.lsm
+```
+
+To export masks for an image:
+
+```
+# Creates a group "masks" under zarr_files/1.zarr
+$ omero zarr masks 1 --output /home/user/zarr_files
 ```

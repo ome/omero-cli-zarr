@@ -13,7 +13,7 @@ from omero.rtypes import rlong
 from omero.model import ImageI
 
 from .raw_pixels import image_to_zarr
-from .masks import image_masks_to_zarr
+from .masks import image_masks_to_zarr, MASK_DTYPE_SIZE
 
 HELP = "Export data in zarr format."
 EXPORT_HELP = "Export an image in zarr format."
@@ -86,6 +86,23 @@ class ZarrControl(BaseControl):
             "object",
             type=ProxyStringType("Image"),
             help="The Image from which to export Masks.",
+        )
+        masks.add_argument(
+            "--split-masks",
+            action="store_true",
+            help=(
+                "Store each ROI in a separate group, required if masks "
+                "overlap"
+            ),
+        )
+        masks.add_argument(
+            "--mask-bits",
+            default=str(max(MASK_DTYPE_SIZE.keys())),
+            choices=[str(s) for s in sorted(MASK_DTYPE_SIZE.keys())],
+            help=(
+                "Integer bit size for each mask pixel, use 1 for a binary "
+                "mask, default %(default)s"
+            ),
         )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
