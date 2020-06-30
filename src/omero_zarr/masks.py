@@ -140,11 +140,7 @@ class MaskSaver:
             )
 
             self.stack_masks(
-                masks,
-                mask_shape,
-                za,
-                ignored_dimensions,
-                check_overlaps=True,
+                masks, mask_shape, za, ignored_dimensions, check_overlaps=True,
             )
 
         # Setting za.attrs[] doesn't work, so go via parent
