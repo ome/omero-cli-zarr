@@ -142,9 +142,9 @@ class MaskSaver:
             self.stack_masks(
                 masks,
                 mask_shape,
+                za,
                 ignored_dimensions,
                 check_overlaps=True,
-                target=za,
             )
 
         # Setting za.attrs[] doesn't work, so go via parent
@@ -290,20 +290,20 @@ class MaskSaver:
         self,
         masks,
         mask_shape,
+        target,
         ignored_dimensions=None,
         check_overlaps=True,
-        target=None,
     ):
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
             into account `ignored_dimensions`
+        :param target nd-array: The output array, pass this if you
+            have already created the array and want to fill it.
         :param ignored_dimensions set(char): Ignore these dimensions and set
             size to 1
         :param check_overlaps bool: Whether to check for overlapping masks or
             not
-        :param labels nd-array: The optional output array, pass this if you
-            have already created the array and want to fill it.
 
         :return: Array with one extra dimension than `mask_shape`
 
