@@ -15,9 +15,28 @@ from omero.model import ImageI
 from .raw_pixels import image_to_zarr
 from .masks import image_masks_to_zarr, MASK_DTYPE_SIZE
 
-HELP = "Export data in zarr format."
+HELP = """Export data in zarr format.
+
+Subcommands
+===========
+
+ - export
+ - masks
+
+"""
 EXPORT_HELP = "Export an image in zarr format."
-MASKS_HELP = "Export ROI Masks on the Image in zarr format."
+MASKS_HELP = """Export ROI Masks on the Image in zarr format.
+
+Options
+-------
+
+  --style
+
+     'labelled': 5D integer values (default but overlaps are not supported!)
+     '6d': masks are stored in a 6D array
+     'split': one group per ROI
+
+"""
 
 
 def gateway_required(func):
@@ -88,12 +107,23 @@ class ZarrControl(BaseControl):
             help="The Image from which to export Masks.",
         )
         masks.add_argument(
-            "--split-masks",
-            action="store_true",
+            "--mask-path",
+            help=("Subdirectory of the image location for storing masks"),
+            default="masks",
+        )
+        masks.add_argument(
+            "--mask-name",
             help=(
-                "Store each ROI in a separate group, required if masks "
-                "overlap"
+                "Name of the array that will be stored. "
+                "Ignored for --style=split"
             ),
+            default="0",
+        )
+        masks.add_argument(
+            "--style",
+            choices=("6d", "split", "labelled"),
+            default="labelled",
+            help=("Choice of storage for ROIs"),
         )
         masks.add_argument(
             "--mask-bits",
