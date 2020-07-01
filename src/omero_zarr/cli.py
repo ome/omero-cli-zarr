@@ -32,9 +32,9 @@ Options
 
   --style
 
+     'labelled': 5D integer values (default but overlaps are not supported!)
      '6d': masks are stored in a 6D array
      'split': one group per ROI
-     'labelled': 5D integer values (overlaps are not supported!)
 
 """
 
@@ -122,12 +122,12 @@ class ZarrControl(BaseControl):
         masks.add_argument(
             "--style",
             choices=("6d", "split", "labelled"),
-            default="6d",
+            default="labelled",
             help=("Choice of storage for ROIs"),
         )
         masks.add_argument(
             "--mask-bits",
-            default=str(min(MASK_DTYPE_SIZE.keys())),
+            default=str(max(MASK_DTYPE_SIZE.keys())),
             choices=[str(s) for s in sorted(MASK_DTYPE_SIZE.keys())],
             help=(
                 "Integer bit size for each mask pixel, use 1 for a binary "
