@@ -272,7 +272,7 @@ class MaskSaver:
             for mask in shapes:
                 # Unused metadata: the{ZTC}, x, y, width, height, textValue
                 if mask.fillColor:
-                    fillColors[count+1] = unwrap(mask.fillColor)
+                    fillColors[count + 1] = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
                 for i_t in self._get_indices(
                     ignored_dimensions, "T", t, size_t
