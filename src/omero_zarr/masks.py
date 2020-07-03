@@ -1,6 +1,8 @@
 import omero.clients  # noqa
 from omero.model import MaskI
 from omero.rtypes import unwrap
+from collections import defaultdict
+from fileinput import input
 import numpy as np
 import zarr
 
@@ -55,7 +57,26 @@ def image_masks_to_zarr(image, args):
             for (roi_id, roi) in masks.items():
                 saver.save([roi], str(roi_id))
         else:
-            saver.save(masks.values(), args.mask_name)
+            if args.mask_map:
+
+                mask_map = defaultdict(list)
+                roi_map = {}
+                for (roi_id, roi) in masks.items():
+                    roi_map[roi_id] = roi
+
+                try:
+                    for line in input(args.mask_map):
+                        line = line.strip()
+                        id, name, roi = line.split(",")
+                        mask_map[name].append(roi_map[int(roi)])
+                except Exception as e:
+                    print(f"Error parsing {args.mask_map}: {e}")
+
+                for name, values in mask_map.items():
+                    print(f"Mask map: {name} (count: {len(values)})")
+                    saver.save(values, name)
+            else:
+                saver.save(masks.values(), args.mask_name)
     else:
         print("No masks found on Image")
 
@@ -244,10 +265,14 @@ class MaskSaver:
                 labels.shape, mask_shape
             )
 
+        fillColors = {}
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
             print(count)
             for mask in shapes:
+                # Unused metadata: the{ZTC}, x, y, width, height, textValue
+                if mask.fillColor:
+                    fillColors[count + 1] = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
                 for i_t in self._get_indices(
                     ignored_dimensions, "T", t, size_t
@@ -280,6 +305,7 @@ class MaskSaver:
                                 binim_yx * (count + 1)  # Prevent zeroing
                             )
 
+        labels.attrs["color"] = fillColors
         return labels
 
     def stack_masks(

@@ -134,6 +134,13 @@ class ZarrControl(BaseControl):
                 "mask, default %(default)s"
             ),
         )
+        masks.add_argument(
+            "--mask-map",
+            help=(
+                "File in format: ID,NAME,ROI_ID which is used to separate "
+                "overlapping masks"
+            ),
+        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
