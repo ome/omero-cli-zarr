@@ -181,10 +181,13 @@ class MaskSaver:
         }
 
         print(f"Created {filename}/{self.path}/{name}")
-        if "masks" in out_masks.attrs:
-            out_masks.attrs["masks"].append(name)
+        attrs = out_masks.attrs.asdict()
+        if "masks" in attrs:
+            if name not in attrs["masks"]:
+                attrs["masks"].append(name)
         else:
-            out_masks.attrs["masks"] = [name]
+            attrs["masks"] = [name]
+        out_masks.attrs.update(attrs)
 
     def _mask_to_binim_yx(self, mask):
         """
