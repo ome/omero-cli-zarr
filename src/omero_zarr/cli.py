@@ -108,7 +108,10 @@ class ZarrControl(BaseControl):
         )
         masks.add_argument(
             "--mask-path",
-            help=("Subdirectory of the image location for storing masks"),
+            help=(
+                "Subdirectory of the image location for storing masks. "
+                "[breaks ome-zarr]"
+            ),
             default="masks",
         )
         masks.add_argument(
@@ -123,7 +126,9 @@ class ZarrControl(BaseControl):
             "--style",
             choices=("6d", "split", "labelled"),
             default="labelled",
-            help=("Choice of storage for ROIs"),
+            help=(
+                "Choice of storage for ROIs [breaks ome-zarr]"
+            ),
         )
         masks.add_argument(
             "--mask-bits",
