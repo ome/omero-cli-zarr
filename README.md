@@ -53,11 +53,11 @@ $ omero zarr masks Image:1 --output /home/user/zarr_files
 
 # Specify the mask-path (default 'masks').
 # e.g. Export to 1.zarr/my_masks:
-$ omero zarr masks Image:1 mask-path=my_masks
+$ omero zarr masks Image:1 --mask-path=my_masks
 
 # Specify the mask-name. (default is '0')
 # e.g. Export to 1.zarr/masks/A
-$ omero zarr masks Image:1 mask-name=A
+$ omero zarr masks Image:1 --mask-name=A
 ```
 
 The default behaviour is to export all masks on the Image to a single 5D
