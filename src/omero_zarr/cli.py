@@ -126,9 +126,7 @@ class ZarrControl(BaseControl):
             "--style",
             choices=("6d", "split", "labelled"),
             default="labelled",
-            help=(
-                "Choice of storage for ROIs [breaks ome-zarr]"
-            ),
+            help=("Choice of storage for ROIs [breaks ome-zarr]"),
         )
         masks.add_argument(
             "--mask-bits",
