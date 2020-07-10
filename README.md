@@ -64,18 +64,7 @@ The default behaviour is to export all masks on the Image to a single 5D
 "labelled" zarr array, with a different value for each mask Shape.
 An exception will be thrown if any of the masks overlap.
 
-To handle overlapping masks, you can export as a 6D zarr array or
-split one zarr group per ROI, using ROI ID as the group name.
-
-```
-# 6D mask saved under 1.zarr/masks/0
-$ omero zarr masks Image:1 --style=6d
-
-# each mask saved under 1.zarr/masks/ROI_ID/
-$ omero zarr masks Image:1 --style=split
-```
-
-An alternative is to save multiple Masks into each zarr group,
+To handle overlapping masks, split masks into non-overlapping zarr groups
 using a "mask-map" which is a csv file of that specifies the name of
 the zarr group for each ROI on the Image. Columns are ID, NAME, ROI_ID.
 
