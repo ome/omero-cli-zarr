@@ -144,6 +144,14 @@ class ZarrControl(BaseControl):
                 "overlapping masks"
             ),
         )
+        masks.add_argument(
+            "--mask-image-array-url",
+            help=(
+                "Optional URL to an array inside a Zarr image containing the "
+                "source image associated with the mask. "
+                "This array should be loadable by the Image Zarr library."
+            ),
+        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(

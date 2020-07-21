@@ -55,7 +55,7 @@ def image_masks_to_zarr(image, args):
         saver = MaskSaver(image, dtype, args.mask_path, args.style)
         if args.style == "split":
             for (roi_id, roi) in masks.items():
-                saver.save([roi], str(roi_id))
+                saver.save([roi], str(roi_id), args.mask_image_array_url)
         else:
             if args.mask_map:
 
@@ -74,15 +74,31 @@ def image_masks_to_zarr(image, args):
 
                 for name, values in mask_map.items():
                     print(f"Mask map: {name} (count: {len(values)})")
-                    saver.save(values, name)
+                    saver.save(values, name, args.mask_image_array_url)
             else:
-                saver.save(masks.values(), args.mask_name)
+                saver.save(
+                    masks.values(), args.mask_name, args.mask_image_array_url
+                )
     else:
         print("No masks found on Image")
 
 
 class MaskSaver:
-    def __init__(self, image, dtype, path="masks", style="6d"):
+    def __init__(self, image, dtype, path="masks", style="labelled"):
+        """
+        Saves masks to an image Zarr.
+
+        After creating this object call `save()` to fetch the masks from
+        OMERO and save them to the image Zarr.
+
+        :param image omero.model.ImageI: OMERO image
+        :param dtype numpy.dtype: dtype of the mask array
+        :param path str: Save masks to this group inside the Zarr
+        :param style str: The form of the masks, "labelled" or "split".
+               "6d" is supported for historic reasons but is incompatible
+               with the Zarr spec and will be removed in future
+        """
+
         self.image = image
         self.dtype = dtype
         self.path = path
@@ -100,7 +116,15 @@ class MaskSaver:
             self.size_x,
         )
 
-    def save(self, masks, name):
+    def save(self, masks, name, image_array_url=None):
+        """
+        Saves masks to an image Zarr.
+
+        :param masks [MaskI]: Iterable container of OMERO masks
+        :param name str: the name of the mask array the Zarr
+        :param image_array_url str: Optional URL to a Zarr array in the source
+               image Zarr
+        """
 
         # Figure out whether we can flatten some dimensions
         unique_dims = {
@@ -165,20 +189,15 @@ class MaskSaver:
             )
 
         # Setting za.attrs[] doesn't work, so go via parent
-        if "0" in root:
-            image_name = "../../0"
+        image_attrs = {}
+        if image_array_url:
+            image_attrs["array"] = image_array_url
+        elif "0" in root:
+            image_attrs["array"] = image_array_url
         else:
-            image_name = "omero://{}.zarr".format(self.image.id)
-        out_masks[name].attrs["image"] = {
-            "array": image_name,
-            "source": {
-                # 'ts': [],
-                # 'cs': [],
-                # 'zs': [],
-                # 'ys': [],
-                # 'xs': [],
-            },
-        }
+            print("WARNING: Not setting mask image.array")
+
+        out_masks[name].attrs["image"] = image_attrs
 
         print(f"Created {filename}/{self.path}/{name}")
         attrs = out_masks.attrs.asdict()
