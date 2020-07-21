@@ -193,7 +193,7 @@ class MaskSaver:
         if image_array_url:
             image_attrs["array"] = image_array_url
         elif "0" in root:
-            image_attrs["array"] = image_array_url
+            image_attrs["array"] = "../../0"
         else:
             print("WARNING: Not setting mask image.array")
 
