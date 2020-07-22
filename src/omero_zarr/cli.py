@@ -217,7 +217,7 @@ class ZarrControl(BaseControl):
             cwd=bf2raw,)
         stdout, stderr = process.communicate()
         if stderr:
-            print(stderr)
+            self.ctx.err(stderr)
         else:
             self.ctx.out("Image exported to {}".format(target.resolve()))
 
