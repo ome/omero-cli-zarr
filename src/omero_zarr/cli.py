@@ -163,20 +163,17 @@ class ZarrControl(BaseControl):
 
     @gateway_required
     def export(self, args):
-
         if isinstance(args.object, ImageI):
             image_id = args.object.id
             image = self._lookup(self.gateway, "Image", image_id)
-            self.ctx.out("Export image: %s" % image.name)
+            inplace = image.getInplaceImport()
 
             if args.bf:
-                path, name = self._get_path(image_id)
-                if path:
-                    self._do_export(path, name, args)
-                else:
-                    print(
-                        "Couldn't find managed repository path for this image."
-                    )
+                paths = image.getImportedImageFilePaths()['client_paths']\
+                    if inplace else \
+                    image.getImportedImageFilePaths()['server_paths']
+                for path in paths:
+                    self._do_export(path, inplace, args)
             else:
                 image_to_zarr(image, args)
 
@@ -188,12 +185,14 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, "No such %s: %s" % (type, oid))
         return obj
 
-    def _do_export(self, path, name, args):
-        abs_path = Path(os.environ["MANAGED_REPO"]) / path / name
+    def _do_export(self, path, inplace, args):
+        abs_path = Path('/') / Path(path) if inplace else \
+            Path(os.environ["MANAGED_REPO"]) / path
 
         bf2raw = Path(os.environ["BF2RAW"])
 
-        target = Path(args.output) / name
+        target_path = Path(args.output) if Path(args.output) else Path.cwd()
+        target = target_path / Path(path).name
         target.mkdir(exist_ok=True)
 
         options = "--file_type=zarr"
@@ -206,38 +205,19 @@ class ZarrControl(BaseControl):
         if args.max_workers:
             options += " --max_workers=" + args.max_workers
 
-        print(options)
+        self.ctx.dbg("%s$ bin/bioformats2raw %s %s %s" % (bf2raw,
+                                                            options,
+                                                            abs_path.resolve(),
+                                                            target.resolve()))
         process = subprocess.Popen(
-            ["bin/bioformats2raw", options, abs_path, target],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=bf2raw,
-        )
+            ["bin/bioformats2raw", options, abs_path.resolve(),
+             target.resolve()], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=bf2raw,)
         stdout, stderr = process.communicate()
         if stderr:
             print(stderr)
         else:
-            print("Image exported to {}".format(target))
-
-    def _get_path(self, image_id):
-        query = """
-        select org from Image i left outer join i.fileset as fs left
-        outer join fs.usedFiles as uf left outer join uf.originalFile as org
-        where i.id = :iid
-        """
-        qs = self.client.sf.getQueryService()
-        params = omero.sys.Parameters()
-        params.map = {"iid": rlong(image_id)}
-        results = qs.findAllByQuery(query, params)
-        for res in results:
-            name = res.name._val
-            path = res.path._val
-            if not (
-                name.endswith(".log")
-                or name.endswith(".txt")
-                or name.endswith(".xml")
-            ):
-                return path, name
+            self.ctx.out("Image exported to {}".format(target.resolve()))
 
 
 try:
