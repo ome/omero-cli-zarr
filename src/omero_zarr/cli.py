@@ -82,8 +82,9 @@ class ZarrControl(BaseControl):
 
         parser.add_argument(
             "--bf",
-            action="store_true",
-            help="Use bioformats2raw to read from managed repo",
+            type=str,
+            help="Full path to bioformats2raw base directory."
+                 "Use bioformats2raw to read from managed repo.",
         )
         parser.add_argument(
             "--tile_width", default=None, help="For use with bioformats2raw"
@@ -169,11 +170,15 @@ class ZarrControl(BaseControl):
             inplace = image.getInplaceImport()
 
             if args.bf:
+                prx, desc = self.client.getManagedRepository(description=True)
+                repo_path = Path(desc._path._val) / Path(desc._name._val)
                 paths = image.getImportedImageFilePaths()['client_paths']\
                     if inplace else \
                     image.getImportedImageFilePaths()['server_paths']
                 for path in paths:
-                    self._do_export(path, inplace, args)
+                    abs_path = Path('/') / Path(path) if inplace else \
+                        repo_path / path
+                    self._bf_export(abs_path, args)
             else:
                 image_to_zarr(image, args)
 
@@ -185,14 +190,11 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, "No such %s: %s" % (type, oid))
         return obj
 
-    def _do_export(self, path, inplace, args):
-        abs_path = Path('/') / Path(path) if inplace else \
-            Path(os.environ["MANAGED_REPO"]) / path
-
-        bf2raw = Path(os.environ["BF2RAW"])
+    def _bf_export(self, abs_path, args):
+        bf2raw = Path(args.bf)
 
         target_path = Path(args.output) if Path(args.output) else Path.cwd()
-        target = target_path / Path(path).name
+        target = target_path / Path(abs_path).name
         target.mkdir(exist_ok=True)
 
         options = "--file_type=zarr"
