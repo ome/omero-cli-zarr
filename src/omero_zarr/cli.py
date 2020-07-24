@@ -1,15 +1,12 @@
 import sys
-import os
 import subprocess
 from pathlib import Path
 from functools import wraps
 
-import omero
 from omero.cli import BaseControl
 from omero.cli import CLI
 from omero.cli import ProxyStringType
 from omero.gateway import BlitzGateway
-from omero.rtypes import rlong
 from omero.model import ImageI
 
 from .raw_pixels import image_to_zarr
@@ -24,7 +21,12 @@ Subcommands
  - masks
 
 """
-EXPORT_HELP = "Export an image in zarr format."
+EXPORT_HELP = """Export an image in zarr format.
+
+In order to use bioformats2raw for the actual export,
+make sure the bioformats2raw binary is in the $PATH.
+"""
+
 MASKS_HELP = """Export ROI Masks on the Image in zarr format.
 
 Options
@@ -80,25 +82,6 @@ class ZarrControl(BaseControl):
             help="Save planes as .npy files in case of connection loss",
         )
 
-        parser.add_argument(
-            "--bf",
-            type=str,
-            help="Full path to bioformats2raw base directory."
-                 "Use bioformats2raw to read from managed repo.",
-        )
-        parser.add_argument(
-            "--tile_width", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--tile_height", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--resolutions", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--max_workers", default=None, help="For use with bioformats2raw"
-        )
-
         # Subcommands
         sub = parser.sub()
         masks = parser.add(sub, self.masks, MASKS_HELP)
@@ -148,6 +131,23 @@ class ZarrControl(BaseControl):
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
+            "--bf",
+            action="store_true",
+            help="Use bioformats2raw to export the image.",
+        )
+        export.add_argument(
+            "--tile_width", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--tile_height", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--resolutions", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--max_workers", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
             "object",
             type=ProxyStringType("Image"),
             help="The Image to export.",
@@ -165,20 +165,18 @@ class ZarrControl(BaseControl):
     @gateway_required
     def export(self, args):
         if isinstance(args.object, ImageI):
-            image_id = args.object.id
-            image = self._lookup(self.gateway, "Image", image_id)
+            image = self._lookup(self.gateway, "Image", args.object.id)
             inplace = image.getInplaceImport()
 
             if args.bf:
                 prx, desc = self.client.getManagedRepository(description=True)
                 repo_path = Path(desc._path._val) / Path(desc._name._val)
-                paths = image.getImportedImageFilePaths()['client_paths']\
-                    if inplace else \
-                    image.getImportedImageFilePaths()['server_paths']
-                for path in paths:
-                    abs_path = Path('/') / Path(path) if inplace else \
-                        repo_path / path
-                    self._bf_export(abs_path, args)
+                if inplace:
+                    for path in image.getImportedImageFilePaths()['client_paths']:
+                        self._bf_export(Path('/') / Path(path), args)
+                else:
+                    for path in image.getImportedImageFilePaths()['server_paths']:
+                        self._bf_export(repo_path / path, args)
             else:
                 image_to_zarr(image, args)
 
@@ -191,10 +189,7 @@ class ZarrControl(BaseControl):
         return obj
 
     def _bf_export(self, abs_path, args):
-        bf2raw = Path(args.bf)
-
-        target_path = Path(args.output) if Path(args.output) else Path.cwd()
-        target = target_path / Path(abs_path).name
+        target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
         target.mkdir(exist_ok=True)
 
         options = "--file_type=zarr"
@@ -207,14 +202,11 @@ class ZarrControl(BaseControl):
         if args.max_workers:
             options += " --max_workers=" + args.max_workers
 
-        self.ctx.dbg("%s$ bin/bioformats2raw %s %s %s" % (bf2raw,
-                                                            options,
-                                                            abs_path.resolve(),
-                                                            target.resolve()))
+        self.ctx.dbg("bioformats2raw %s %s %s" % (options, abs_path.resolve(),
+                                                  target.resolve()))
         process = subprocess.Popen(
-            ["bin/bioformats2raw", options, abs_path.resolve(),
-             target.resolve()], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=bf2raw,)
+            ["bioformats2raw", options, abs_path.resolve(),
+             target.resolve()], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = process.communicate()
         if stderr:
             self.ctx.err(stderr)
