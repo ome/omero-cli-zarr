@@ -172,11 +172,11 @@ class ZarrControl(BaseControl):
                 prx, desc = self.client.getManagedRepository(description=True)
                 repo_path = Path(desc._path._val) / Path(desc._name._val)
                 if inplace:
-                    for path in image.getImportedImageFilePaths()['client_paths']:
-                        self._bf_export(Path('/') / Path(path), args)
+                    for p in image.getImportedImageFilePaths()['client_paths']:
+                        self._bf_export(Path('/') / Path(p), args)
                 else:
-                    for path in image.getImportedImageFilePaths()['server_paths']:
-                        self._bf_export(repo_path / path, args)
+                    for p in image.getImportedImageFilePaths()['server_paths']:
+                        self._bf_export(repo_path / p, args)
             else:
                 image_to_zarr(image, args)
 
