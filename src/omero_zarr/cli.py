@@ -172,10 +172,10 @@ class ZarrControl(BaseControl):
                 prx, desc = self.client.getManagedRepository(description=True)
                 repo_path = Path(desc._path._val) / Path(desc._name._val)
                 if inplace:
-                    for p in image.getImportedImageFilePaths()['client_paths']:
-                        self._bf_export(Path('/') / Path(p), args)
+                    for p in image.getImportedImageFilePaths()["client_paths"]:
+                        self._bf_export(Path("/") / Path(p), args)
                 else:
-                    for p in image.getImportedImageFilePaths()['server_paths']:
+                    for p in image.getImportedImageFilePaths()["server_paths"]:
                         self._bf_export(repo_path / p, args)
             else:
                 image_to_zarr(image, args)
@@ -202,11 +202,15 @@ class ZarrControl(BaseControl):
         if args.max_workers:
             options += " --max_workers=" + args.max_workers
 
-        self.ctx.dbg("bioformats2raw %s %s %s" % (options, abs_path.resolve(),
-                                                  target.resolve()))
+        self.ctx.dbg(
+            "bioformats2raw %s %s %s"
+            % (options, abs_path.resolve(), target.resolve())
+        )
         process = subprocess.Popen(
-            ["bioformats2raw", options, abs_path.resolve(),
-             target.resolve()], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            ["bioformats2raw", options, abs_path.resolve(), target.resolve()],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         stdout, stderr = process.communicate()
         if stderr:
             self.ctx.err(stderr)
