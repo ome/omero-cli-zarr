@@ -1,15 +1,12 @@
 import sys
-import os
 import subprocess
 from pathlib import Path
 from functools import wraps
 
-import omero
 from omero.cli import BaseControl
 from omero.cli import CLI
 from omero.cli import ProxyStringType
 from omero.gateway import BlitzGateway
-from omero.rtypes import rlong
 from omero.model import ImageI
 
 from .raw_pixels import image_to_zarr
@@ -24,7 +21,12 @@ Subcommands
  - masks
 
 """
-EXPORT_HELP = "Export an image in zarr format."
+EXPORT_HELP = """Export an image in zarr format.
+
+In order to use bioformats2raw for the actual export,
+make sure the bioformats2raw binary is in the $PATH.
+"""
+
 MASKS_HELP = """Export ROI Masks on the Image in zarr format.
 
 Options
@@ -80,24 +82,6 @@ class ZarrControl(BaseControl):
             help="Save planes as .npy files in case of connection loss",
         )
 
-        parser.add_argument(
-            "--bf",
-            action="store_true",
-            help="Use bioformats2raw to read from managed repo",
-        )
-        parser.add_argument(
-            "--tile_width", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--tile_height", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--resolutions", default=None, help="For use with bioformats2raw"
-        )
-        parser.add_argument(
-            "--max_workers", default=None, help="For use with bioformats2raw"
-        )
-
         # Subcommands
         sub = parser.sub()
         masks = parser.add(sub, self.masks, MASKS_HELP)
@@ -147,6 +131,23 @@ class ZarrControl(BaseControl):
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
+            "--bf",
+            action="store_true",
+            help="Use bioformats2raw to export the image.",
+        )
+        export.add_argument(
+            "--tile_width", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--tile_height", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--resolutions", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
+            "--max_workers", default=None, help="For use with bioformats2raw"
+        )
+        export.add_argument(
             "object",
             type=ProxyStringType("Image"),
             help="The Image to export.",
@@ -163,20 +164,19 @@ class ZarrControl(BaseControl):
 
     @gateway_required
     def export(self, args):
-
         if isinstance(args.object, ImageI):
-            image_id = args.object.id
-            image = self._lookup(self.gateway, "Image", image_id)
-            self.ctx.out("Export image: %s" % image.name)
+            image = self._lookup(self.gateway, "Image", args.object.id)
+            inplace = image.getInplaceImport()
 
             if args.bf:
-                path, name = self._get_path(image_id)
-                if path:
-                    self._do_export(path, name, args)
+                prx, desc = self.client.getManagedRepository(description=True)
+                repo_path = Path(desc._path._val) / Path(desc._name._val)
+                if inplace:
+                    for p in image.getImportedImageFilePaths()["client_paths"]:
+                        self._bf_export(Path("/") / Path(p), args)
                 else:
-                    print(
-                        "Couldn't find managed repository path for this image."
-                    )
+                    for p in image.getImportedImageFilePaths()["server_paths"]:
+                        self._bf_export(repo_path / p, args)
             else:
                 image_to_zarr(image, args)
 
@@ -188,12 +188,8 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, "No such %s: %s" % (type, oid))
         return obj
 
-    def _do_export(self, path, name, args):
-        abs_path = Path(os.environ["MANAGED_REPO"]) / path / name
-
-        bf2raw = Path(os.environ["BF2RAW"])
-
-        target = Path(args.output) / name
+    def _bf_export(self, abs_path, args):
+        target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
         target.mkdir(exist_ok=True)
 
         options = "--file_type=zarr"
@@ -206,38 +202,20 @@ class ZarrControl(BaseControl):
         if args.max_workers:
             options += " --max_workers=" + args.max_workers
 
-        print(options)
+        self.ctx.dbg(
+            "bioformats2raw %s %s %s"
+            % (options, abs_path.resolve(), target.resolve())
+        )
         process = subprocess.Popen(
-            ["bin/bioformats2raw", options, abs_path, target],
+            ["bioformats2raw", options, abs_path.resolve(), target.resolve()],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=bf2raw,
         )
         stdout, stderr = process.communicate()
         if stderr:
-            print(stderr)
+            self.ctx.err(stderr)
         else:
-            print("Image exported to {}".format(target))
-
-    def _get_path(self, image_id):
-        query = """
-        select org from Image i left outer join i.fileset as fs left
-        outer join fs.usedFiles as uf left outer join uf.originalFile as org
-        where i.id = :iid
-        """
-        qs = self.client.sf.getQueryService()
-        params = omero.sys.Parameters()
-        params.map = {"iid": rlong(image_id)}
-        results = qs.findAllByQuery(query, params)
-        for res in results:
-            name = res.name._val
-            path = res.path._val
-            if not (
-                name.endswith(".log")
-                or name.endswith(".txt")
-                or name.endswith(".xml")
-            ):
-                return path, name
+            self.ctx.out("Image exported to {}".format(target.resolve()))
 
 
 try:
