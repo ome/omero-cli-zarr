@@ -45,44 +45,44 @@ def image_masks_to_zarr(image, args):
 
     print(f"Found {shape_count} mask shapes in {len(masks)} ROIs")
 
-    dtype = MASK_DTYPE_SIZE[int(args.mask_bits)]
+    dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
 
-    if args.style == "labeled" and args.mask_bits == "1":
+    if args.style == "labeled" and args.label_bits == "1":
         print("Boolean type makes no sense for labeled. Using 64")
         dtype = MASK_DTYPE_SIZE[64]
 
     if masks:
-        saver = MaskSaver(image, dtype, args.mask_path, args.style)
+        saver = MaskSaver(image, dtype, args.label_path, args.style)
         if args.style == "split":
             for (roi_id, roi) in masks.items():
                 saver.save([roi], str(roi_id))
         else:
-            if args.mask_map:
+            if args.label_map:
 
-                mask_map = defaultdict(list)
+                label_map = defaultdict(list)
                 roi_map = {}
                 for (roi_id, roi) in masks.items():
                     roi_map[roi_id] = roi
 
                 try:
-                    for line in input(args.mask_map):
+                    for line in input(args.label_map):
                         line = line.strip()
                         id, name, roi = line.split(",")
-                        mask_map[name].append(roi_map[int(roi)])
+                        label_map[name].append(roi_map[int(roi)])
                 except Exception as e:
-                    print(f"Error parsing {args.mask_map}: {e}")
+                    print(f"Error parsing {args.label_map}: {e}")
 
-                for name, values in mask_map.items():
-                    print(f"Mask map: {name} (count: {len(values)})")
+                for name, values in label_map.items():
+                    print(f"Label map: {name} (count: {len(values)})")
                     saver.save(values, name)
             else:
-                saver.save(masks.values(), args.mask_name)
+                saver.save(masks.values(), args.label_name)
     else:
         print("No masks found on Image")
 
 
 class MaskSaver:
-    def __init__(self, image, dtype, path="masks", style="6d"):
+    def __init__(self, image, dtype, path="labels", style="6d"):
         self.image = image
         self.dtype = dtype
         self.path = path
@@ -123,9 +123,9 @@ class MaskSaver:
         filename = f"{self.image.id}.zarr"
         root = zarr.open(filename)
         if self.path in root.group_keys():
-            out_masks = getattr(root, self.path)
+            out_labels = getattr(root, self.path)
         else:
-            out_masks = root.create_group(self.path)
+            out_labels = root.create_group(self.path)
 
         mask_shape = list(self.image_shape)
         for d in ignored_dimensions:
@@ -134,7 +134,7 @@ class MaskSaver:
 
         if self.style in ("labeled", "split"):
 
-            za = out_masks.create_dataset(
+            za = out_labels.create_dataset(
                 name,
                 shape=mask_shape,
                 chunks=(1, 1, 1, self.size_y, self.size_x),
@@ -152,7 +152,7 @@ class MaskSaver:
 
         else:
             assert self.style == "6d"
-            za = out_masks.create_dataset(
+            za = out_labels.create_dataset(
                 name,
                 shape=tuple([len(masks)] + mask_shape),
                 chunks=(1, 1, 1, 1, self.size_y, self.size_x),
@@ -169,7 +169,7 @@ class MaskSaver:
             image_name = "../../0"
         else:
             image_name = "omero://{}.zarr".format(self.image.id)
-        out_masks[name].attrs["image"] = {
+        out_labels[name].attrs["image"] = {
             "array": image_name,
             "source": {
                 # 'ts': [],
@@ -181,13 +181,14 @@ class MaskSaver:
         }
 
         print(f"Created {filename}/{self.path}/{name}")
-        attrs = out_masks.attrs.asdict()
-        if "masks" in attrs:
-            if name not in attrs["masks"]:
-                attrs["masks"].append(name)
+        attrs = out_labels.attrs.asdict()
+        # TODO: could temporarily support "masks" here as well
+        if "labels" in attrs:
+            if name not in attrs["labels"]:
+                attrs["labels"].append(name)
         else:
-            attrs["masks"] = [name]
-        out_masks.attrs.update(attrs)
+            attrs["labels"] = [name]
+        out_labels.attrs.update(attrs)
 
     def _mask_to_binim_yx(self, mask):
         """

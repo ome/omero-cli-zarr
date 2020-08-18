@@ -91,15 +91,15 @@ class ZarrControl(BaseControl):
             help="The Image from which to export Masks.",
         )
         masks.add_argument(
-            "--mask-path",
+            "--label-path",
             help=(
-                "Subdirectory of the image location for storing masks. "
+                "Subdirectory of the image location for storing labels. "
                 "[breaks ome-zarr]"
             ),
-            default="masks",
+            default="labels",
         )
         masks.add_argument(
-            "--mask-name",
+            "--label-name",
             help=(
                 "Name of the array that will be stored. "
                 "Ignored for --style=split"
@@ -113,19 +113,19 @@ class ZarrControl(BaseControl):
             help=("Choice of storage for ROIs [breaks ome-zarr]"),
         )
         masks.add_argument(
-            "--mask-bits",
+            "--label-bits",
             default=str(max(MASK_DTYPE_SIZE.keys())),
             choices=[str(s) for s in sorted(MASK_DTYPE_SIZE.keys())],
             help=(
-                "Integer bit size for each mask pixel, use 1 for a binary "
-                "mask, default %(default)s"
+                "Integer bit size for each label pixel, use 1 for a binary "
+                "label, default %(default)s"
             ),
         )
         masks.add_argument(
-            "--mask-map",
+            "--label-map",
             help=(
                 "File in format: ID,NAME,ROI_ID which is used to separate "
-                "overlapping masks"
+                "overlapping labels"
             ),
         )
 
