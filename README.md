@@ -61,7 +61,7 @@ $ omero zarr masks Image:1 --mask-name=A
 ```
 
 The default behaviour is to export all masks on the Image to a single 5D
-"labelled" zarr array, with a different value for each mask Shape.
+"labeled" zarr array, with a different value for each mask Shape.
 An exception will be thrown if any of the masks overlap.
 
 To handle overlapping masks, split masks into non-overlapping zarr groups

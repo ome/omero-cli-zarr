@@ -34,7 +34,7 @@ Options
 
   --style
 
-     'labelled': 5D integer values (default but overlaps are not supported!)
+     'labeled': 5D integer values (default but overlaps are not supported!)
      '6d': masks are stored in a 6D array
      'split': one group per ROI
 
@@ -108,8 +108,8 @@ class ZarrControl(BaseControl):
         )
         masks.add_argument(
             "--style",
-            choices=("6d", "split", "labelled"),
-            default="labelled",
+            choices=("6d", "split", "labeled"),
+            default="labeled",
             help=("Choice of storage for ROIs [breaks ome-zarr]"),
         )
         masks.add_argument(

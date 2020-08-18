@@ -47,8 +47,8 @@ def image_masks_to_zarr(image, args):
 
     dtype = MASK_DTYPE_SIZE[int(args.mask_bits)]
 
-    if args.style == "labelled" and args.mask_bits == "1":
-        print("Boolean type makes no sense for labelled. Using 64")
+    if args.style == "labeled" and args.mask_bits == "1":
+        print("Boolean type makes no sense for labeled. Using 64")
         dtype = MASK_DTYPE_SIZE[64]
 
     if masks:
@@ -132,7 +132,7 @@ class MaskSaver:
             mask_shape[DIMENSION_ORDER[d]] = 1
         print("Ignoring dimensions {}".format(ignored_dimensions))
 
-        if self.style in ("labelled", "split"):
+        if self.style in ("labeled", "split"):
 
             za = out_masks.create_dataset(
                 name,
