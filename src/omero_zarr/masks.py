@@ -272,14 +272,17 @@ class MaskSaver:
                 labels.shape, mask_shape
             )
 
-        fillColors = {}
+        fillColors = []
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
             print(count)
+            # label_index could alternatively be the ROI-ID
+            label_index = count + 1
+            maskColor = None
             for mask in shapes:
                 # Unused metadata: the{ZTC}, x, y, width, height, textValue
-                if mask.fillColor:
-                    fillColors[count + 1] = unwrap(mask.fillColor)
+                if mask.fillColor and maskColor is None:
+                    maskColor = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
                 for i_t in self._get_indices(
                     ignored_dimensions, "T", t, size_t
@@ -309,8 +312,9 @@ class MaskSaver:
                             labels[
                                 i_t, i_c, i_z, y : (y + h), x : (x + w)
                             ] += (
-                                binim_yx * (count + 1)  # Prevent zeroing
+                                binim_yx * (label_index)  # Prevent zeroing
                             )
+            fillColors.append({'label': label_index, 'rgba': maskColor})
 
         labels.attrs["color"] = fillColors
         return labels
