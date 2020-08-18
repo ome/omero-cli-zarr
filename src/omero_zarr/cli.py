@@ -91,6 +91,14 @@ class ZarrControl(BaseControl):
             help="The Image from which to export Masks.",
         )
         masks.add_argument(
+            "--source-image",
+            help=(
+                "Path to the multiscales group containing the source image. "
+                "By default, use the output directory"
+            ),
+            default=None,
+        )
+        masks.add_argument(
             "--label-path",
             help=(
                 "Subdirectory of the image location for storing labels. "

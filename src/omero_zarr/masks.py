@@ -5,6 +5,7 @@ from collections import defaultdict
 from fileinput import input
 import numpy as np
 import zarr
+import ome_zarr
 
 
 # Mapping of dimension names to axes in the Zarr
@@ -52,7 +53,14 @@ def image_masks_to_zarr(image, args):
         dtype = MASK_DTYPE_SIZE[64]
 
     if masks:
-        saver = MaskSaver(image, dtype, args.label_path, args.style)
+
+        saver = MaskSaver(
+            image,
+            dtype,
+            args.label_path,
+            args.style,
+            args.source_image)
+
         if args.style == "split":
             for (roi_id, roi) in masks.items():
                 saver.save([roi], str(roi_id))
@@ -82,7 +90,12 @@ def image_masks_to_zarr(image, args):
 
 
 class MaskSaver:
-    def __init__(self, image, dtype, path="labels", style="6d"):
+    """
+    Action class containing the parameters needed for mapping from
+    masks to zarr groups/arrays.
+    """
+
+    def __init__(self, image, dtype, path="labels", style="6d", source=".."):
         self.image = image
         self.dtype = dtype
         self.path = path
@@ -92,6 +105,7 @@ class MaskSaver:
         self.size_z = image.getSizeZ()
         self.size_y = image.getSizeY()
         self.size_x = image.getSizeX()
+        self.source_image = source
         self.image_shape = (
             self.size_t,
             self.size_c,
@@ -121,6 +135,16 @@ class MaskSaver:
                 ignored_dimensions.add(d)
 
         filename = f"{self.image.id}.zarr"
+
+        # Verify that we are linking this mask to a real ome-zarr
+        source_image = self.source_image
+        source_image_link = self.source_image
+        if source_image is None:
+            # Assume that we're using the output directory
+            source_image = filename
+            source_image_link = "../.."  # Drop "labels/0"
+        src = ome_zarr.parse_url(source_image)
+
         root = zarr.open(filename)
         if self.path in root.group_keys():
             out_labels = getattr(root, self.path)
@@ -164,13 +188,9 @@ class MaskSaver:
                 masks, mask_shape, za, ignored_dimensions, check_overlaps=True,
             )
 
-        # Setting za.attrs[] doesn't work, so go via parent
-        if "0" in root:
-            image_name = "../../0"
-        else:
-            image_name = "omero://{}.zarr".format(self.image.id)
+
         out_labels[name].attrs["image"] = {
-            "array": image_name,
+            "array": source_image_link,
             "source": {
                 # 'ts': [],
                 # 'cs': [],
