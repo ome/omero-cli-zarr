@@ -55,11 +55,8 @@ def image_masks_to_zarr(image, args):
     if masks:
 
         saver = MaskSaver(
-            image,
-            dtype,
-            args.label_path,
-            args.style,
-            args.source_image)
+            image, dtype, args.label_path, args.style, args.source_image
+        )
 
         if args.style == "split":
             for (roi_id, roi) in masks.items():
@@ -187,7 +184,6 @@ class MaskSaver:
             self.stack_masks(
                 masks, mask_shape, za, ignored_dimensions, check_overlaps=True,
             )
-
 
         out_labels[name].attrs["image"] = {
             "array": source_image_link,
