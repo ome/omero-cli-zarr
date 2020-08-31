@@ -140,9 +140,12 @@ class MaskSaver:
             # Assume that we're using the output directory
             source_image = filename
             source_image_link = "../.."  # Drop "labels/0"
+
         src = ome_zarr.parse_url(source_image)
+        assert src
 
         root = zarr.open(filename)
+        # TODO: Use ome-zarr here to write a multiscale?
         if self.path in root.group_keys():
             out_labels = getattr(root, self.path)
         else:
