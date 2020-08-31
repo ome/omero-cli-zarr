@@ -4,8 +4,11 @@ from fileinput import input
 from typing import Dict, List, Set, Tuple
 
 import numpy as np
-import ome_zarr
 import omero.clients  # noqa
+from ome_zarr.data import write_multiscale
+from ome_zarr.io import parse_url
+from ome_zarr.reader import Layer, Multiscales
+from ome_zarr.scale import Scaler
 from omero.model import MaskI
 from omero.rtypes import unwrap
 from zarr.convenience import open as zarr_open
@@ -97,7 +100,7 @@ class MaskSaver:
         image: omero.gateway.Image,
         dtype: np.dtype,
         path: str = "labels",
-        style: str = "6d",
+        style: str = "labeled",
         source: str = "..",
     ) -> None:
         self.image = image
@@ -143,11 +146,13 @@ class MaskSaver:
             source_image = filename
             source_image_link = "../.."  # Drop "labels/0"
 
-        src = ome_zarr.parse_url(source_image)
+        src = parse_url(source_image)
         assert src
+        input_pyramid = Layer(src, [])
+        assert input_pyramid.load(Multiscales)
+        input_pyramid_levels = len(input_pyramid.data)
 
         root = zarr_open(filename)
-        # TODO: Use ome-zarr here to write a multiscale?
         if self.path in root.group_keys():
             out_labels = getattr(root, self.path)
         else:
@@ -162,33 +167,22 @@ class MaskSaver:
 
         if self.style in ("labeled", "split"):
 
-            za = out_labels.create_dataset(
-                name,
-                shape=mask_shape,
-                chunks=(1, 1, 1, self.size_y, self.size_x),
-                dtype=self.dtype,
-                overwrite=True,
+            labels, fill_colors = self.masks_to_labels(
+                masks, mask_shape, ignored_dimensions, check_overlaps=True,
             )
-
-            self.masks_to_labels(
-                masks, mask_shape, ignored_dimensions, check_overlaps=True, labels=za,
-            )
+            scaler = Scaler(max_layer=input_pyramid_levels)
+            label_pyramid = scaler.nearest(labels)
+            pyramid_grp = out_labels.create_group(name)
+            if fill_colors:
+                pyramid_grp.attrs["color"] = fill_colors  # TODO: move to method
+            write_multiscale(
+                label_pyramid, pyramid_grp
+            )  # TODO: dtype, chunks, overwite
 
         else:
-            assert self.style == "6d"
-            za = out_labels.create_dataset(
-                name,
-                shape=tuple([len(masks)] + list(mask_shape)),
-                chunks=(1, 1, 1, 1, self.size_y, self.size_x),
-                dtype=self.dtype,
-                overwrite=True,
-            )
+            assert False, "6d has been removed"
 
-            self.stack_masks(
-                masks, mask_shape, za, ignored_dimensions, check_overlaps=True,
-            )
-
-        out_labels[name].attrs["image"] = {
+        pyramid_grp.attrs["image"] = {
             "array": source_image_link,
             "source": {
                 # 'ts': [],
@@ -259,8 +253,7 @@ class MaskSaver:
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Set[str] = None,
         check_overlaps: bool = True,
-        labels: np.ndarray = None,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, Dict[int, str]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
@@ -269,10 +262,8 @@ class MaskSaver:
             size to 1
         :param check_overlaps bool: Whether to check for overlapping masks or
             not
-        :param labels nd-array: The optional output array, pass this if you
-            have already created the array and want to fill it.
+        :return: Label image with size `mask_shape` as well as color metadata.
 
-        :return: Label image with size `mask_shape`
 
         TODO: Move to https://github.com/ome/omero-rois/
         """
@@ -284,9 +275,7 @@ class MaskSaver:
         size_z: int = mask_shape[2]
         ignored_dimensions = ignored_dimensions or set()
 
-        if not labels:
-            # TODO: Set np.int size based on number of labels
-            labels = np.zeros(mask_shape, np.int64)
+        labels = np.zeros(mask_shape, np.int64)
 
         for d in "TCZYX":
             if d in ignored_dimensions:
@@ -297,7 +286,7 @@ class MaskSaver:
                 labels.shape == mask_shape
             ), f"Invalid label shape: {labels.shape}, expected {mask_shape}"
 
-        fillColors = {}
+        fillColors: Dict[int, str] = {}
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
             print(count)
@@ -328,61 +317,4 @@ class MaskSaver:
                                 binim_yx * (count + 1)  # Prevent zeroing
                             )
 
-        labels.attrs["color"] = fillColors
-        return labels
-
-    def stack_masks(
-        self,
-        masks: List[omero.model.Mask],
-        mask_shape: Tuple[int, ...],
-        target: np.ndarray,
-        ignored_dimensions: Set[str] = None,
-        check_overlaps: bool = True,
-    ) -> None:
-        """
-        :param masks [MaskI]: Iterable container of OMERO masks
-        :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
-            into account `ignored_dimensions`
-        :param target nd-array: The output array, pass this if you
-            have already created the array and want to fill it.
-        :param ignored_dimensions set(char): Ignore these dimensions and set
-            size to 1.
-        :param check_overlaps bool: Whether to check for overlapping masks or
-            not
-
-        :return: Array with one extra dimension than `mask_shape`
-
-        TODO: Move to https://github.com/ome/omero-rois/
-        """
-
-        assert len(mask_shape) > 3
-        size_t: int = mask_shape[0]
-        size_c: int = mask_shape[1]
-        size_z: int = mask_shape[2]
-        if ignored_dimensions is None:
-            ignored_dimensions = set()
-
-        if not target:
-            raise Exception("No target")
-
-        for d in "TCZYX":
-            if d in ignored_dimensions:
-                assert (
-                    target.shape[DIMENSION_ORDER[d] + 1] == 1
-                ), f"Ignored dimension {d} should be size 1"
-            assert target.shape == tuple(
-                [len(masks)] + list(mask_shape)
-            ), f"Invalid label shape: {target.shape}, expected {mask_shape}"
-
-        for count, shapes in enumerate(masks):
-            # All shapes same color for each ROI
-            for mask in shapes:
-                binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
-                for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
-                    for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
-                        for i_z in self._get_indices(
-                            ignored_dimensions, "Z", z, size_z
-                        ):
-                            target[
-                                count, i_t, i_c, i_z, y : (y + h), x : (x + w)
-                            ] += binim_yx  # Here one could assign probabilities
+        return labels, fillColors

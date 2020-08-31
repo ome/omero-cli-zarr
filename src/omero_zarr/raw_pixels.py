@@ -6,8 +6,7 @@ import numpy
 import numpy as np
 import omero.clients  # noqa
 from omero.rtypes import unwrap
-from zarr.hierarchy import open_group
-from zarr.storage import Group
+from zarr.hierarchy import Group, open_group
 
 
 def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
