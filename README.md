@@ -2,7 +2,7 @@ OMERO CLI Zarr plugin
 =====================
 
 This OMERO command-line plugin allows you to export images from
-OMERO as zarr files, according to the spec at 
+OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md.
 
 These are 5D arrays of shape `(t, c, z, y, x)`.

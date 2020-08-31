@@ -1,15 +1,17 @@
+import argparse
+from collections import defaultdict
+from fileinput import input
+from typing import Dict, List, Set, Tuple
+
+import numpy as np
+import ome_zarr
 import omero.clients  # noqa
 from omero.model import MaskI
 from omero.rtypes import unwrap
-from collections import defaultdict
-from fileinput import input
-import numpy as np
-import zarr
-import ome_zarr
-
+from zarr.convenience import open as zarr_open
 
 # Mapping of dimension names to axes in the Zarr
-DIMENSION_ORDER = {
+DIMENSION_ORDER: Dict[str, int] = {
     "T": 0,
     "C": 1,
     "Z": 2,
@@ -17,7 +19,7 @@ DIMENSION_ORDER = {
     "X": 4,
 }
 
-MASK_DTYPE_SIZE = {
+MASK_DTYPE_SIZE: Dict[int, np.dtype] = {
     1: np.bool,
     8: np.int8,
     16: np.int16,
@@ -26,7 +28,7 @@ MASK_DTYPE_SIZE = {
 }
 
 
-def image_masks_to_zarr(image, args):
+def image_masks_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
 
     conn = image._conn
     roi_service = conn.getRoiService()
@@ -54,9 +56,7 @@ def image_masks_to_zarr(image, args):
 
     if masks:
 
-        saver = MaskSaver(
-            image, dtype, args.label_path, args.style, args.source_image
-        )
+        saver = MaskSaver(image, dtype, args.label_path, args.style, args.source_image)
 
         if args.style == "split":
             for (roi_id, roi) in masks.items():
@@ -72,7 +72,7 @@ def image_masks_to_zarr(image, args):
                 try:
                     for line in input(args.label_map):
                         line = line.strip()
-                        id, name, roi = line.split(",")
+                        sid, name, roi = line.split(",")
                         label_map[name].append(roi_map[int(roi)])
                 except Exception as e:
                     print(f"Error parsing {args.label_map}: {e}")
@@ -81,7 +81,7 @@ def image_masks_to_zarr(image, args):
                     print(f"Label map: {name} (count: {len(values)})")
                     saver.save(values, name)
             else:
-                saver.save(masks.values(), args.label_name)
+                saver.save(list(masks.values()), args.label_name)
     else:
         print("No masks found on Image")
 
@@ -92,7 +92,14 @@ class MaskSaver:
     masks to zarr groups/arrays.
     """
 
-    def __init__(self, image, dtype, path="labels", style="6d", source=".."):
+    def __init__(
+        self,
+        image: omero.gateway.Image,
+        dtype: np.dtype,
+        path: str = "labels",
+        style: str = "6d",
+        source: str = "..",
+    ) -> None:
         self.image = image
         self.dtype = dtype
         self.path = path
@@ -111,20 +118,15 @@ class MaskSaver:
             self.size_x,
         )
 
-    def save(self, masks, name):
+    def save(self, masks: List[omero.model.Shape], name: str) -> None:
 
         # Figure out whether we can flatten some dimensions
-        unique_dims = {
-            "T": set(),
-            "C": set(),
-            "Z": set(),
+        unique_dims: Dict[str, Set[int]] = {
+            "T": {unwrap(mask.theT) for shapes in masks for mask in shapes},
+            "C": {unwrap(mask.theC) for shapes in masks for mask in shapes},
+            "Z": {unwrap(mask.theZ) for shapes in masks for mask in shapes},
         }
-        for shapes in masks:
-            for mask in shapes:
-                unique_dims["T"].add(unwrap(mask.theT))
-                unique_dims["C"].add(unwrap(mask.theC))
-                unique_dims["Z"].add(unwrap(mask.theZ))
-        ignored_dimensions = set()
+        ignored_dimensions: Set[str] = set()
         print(f"Unique dimensions: {unique_dims}")
 
         for d in "TCZ":
@@ -144,17 +146,19 @@ class MaskSaver:
         src = ome_zarr.parse_url(source_image)
         assert src
 
-        root = zarr.open(filename)
+        root = zarr_open(filename)
         # TODO: Use ome-zarr here to write a multiscale?
         if self.path in root.group_keys():
             out_labels = getattr(root, self.path)
         else:
             out_labels = root.create_group(self.path)
 
-        mask_shape = list(self.image_shape)
+        _mask_shape: List[int] = list(self.image_shape)
         for d in ignored_dimensions:
-            mask_shape[DIMENSION_ORDER[d]] = 1
-        print("Ignoring dimensions {}".format(ignored_dimensions))
+            _mask_shape[DIMENSION_ORDER[d]] = 1
+            mask_shape: Tuple[int, ...] = tuple(_mask_shape)
+        del _mask_shape
+        print(f"Ignoring dimensions {ignored_dimensions}")
 
         if self.style in ("labeled", "split"):
 
@@ -167,18 +171,14 @@ class MaskSaver:
             )
 
             self.masks_to_labels(
-                masks,
-                mask_shape,
-                ignored_dimensions,
-                check_overlaps=True,
-                labels=za,
+                masks, mask_shape, ignored_dimensions, check_overlaps=True, labels=za,
             )
 
         else:
             assert self.style == "6d"
             za = out_labels.create_dataset(
                 name,
-                shape=tuple([len(masks)] + mask_shape),
+                shape=tuple([len(masks)] + list(mask_shape)),
                 chunks=(1, 1, 1, 1, self.size_y, self.size_x),
                 dtype=self.dtype,
                 overwrite=True,
@@ -209,7 +209,9 @@ class MaskSaver:
             attrs["labels"] = [name]
         out_labels.attrs.update(attrs)
 
-    def _mask_to_binim_yx(self, mask):
+    def _mask_to_binim_yx(
+        self, mask: omero.model.Shape
+    ) -> Tuple[np.ndarray, Tuple[int, ...]]:
         """
         :param mask MaskI: An OMERO mask
 
@@ -239,7 +241,9 @@ class MaskSaver:
 
         return binarray, (t, c, z, y, x, h, w)
 
-    def _get_indices(self, ignored_dimensions, d, d_value, d_size):
+    def _get_indices(
+        self, ignored_dimensions: Set[str], d: str, d_value: int, d_size: int
+    ) -> List[int]:
         """
         Figures out which Z/C/T-planes a mask should be copied to
         """
@@ -251,12 +255,12 @@ class MaskSaver:
 
     def masks_to_labels(
         self,
-        masks,
-        mask_shape,
-        ignored_dimensions=None,
-        check_overlaps=True,
-        labels=None,
-    ):
+        masks: List[omero.model.Mask],
+        mask_shape: Tuple[int, ...],
+        ignored_dimensions: Set[str] = None,
+        check_overlaps: bool = True,
+        labels: np.ndarray = None,
+    ) -> np.ndarray:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
@@ -273,9 +277,12 @@ class MaskSaver:
         TODO: Move to https://github.com/ome/omero-rois/
         """
 
-        size_t, size_c, size_z, size_y, size_x = mask_shape
+        # FIXME: hard-coded dimensions
+        assert len(mask_shape) > 3
+        size_t: int = mask_shape[0]
+        size_c: int = mask_shape[1]
+        size_z: int = mask_shape[2]
         ignored_dimensions = ignored_dimensions or set()
-        mask_shape = tuple(mask_shape)
 
         if not labels:
             # TODO: Set np.int size based on number of labels
@@ -285,12 +292,10 @@ class MaskSaver:
             if d in ignored_dimensions:
                 assert (
                     labels.shape[DIMENSION_ORDER[d]] == 1
-                ), "Ignored dimension {} should be size 1".format(d)
+                ), f"Ignored dimension {d} should be size 1"
             assert (
                 labels.shape == mask_shape
-            ), "Invalid label shape: {}, expected {}".format(
-                labels.shape, mask_shape
-            )
+            ), f"Invalid label shape: {labels.shape}, expected {mask_shape}"
 
         fillColors = {}
         for count, shapes in enumerate(masks):
@@ -301,12 +306,8 @@ class MaskSaver:
                 if mask.fillColor:
                     fillColors[count + 1] = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
-                for i_t in self._get_indices(
-                    ignored_dimensions, "T", t, size_t
-                ):
-                    for i_c in self._get_indices(
-                        ignored_dimensions, "C", c, size_c
-                    ):
+                for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
+                    for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
                         for i_z in self._get_indices(
                             ignored_dimensions, "Z", z, size_z
                         ):
@@ -319,16 +320,11 @@ class MaskSaver:
                                 )
                             ):
                                 raise Exception(
-                                    (
-                                        f"Mask {count} overlaps "
-                                        "with existing labels"
-                                    )
+                                    f"Mask {count} overlaps " "with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous masks
-                            labels[
-                                i_t, i_c, i_z, y : (y + h), x : (x + w)
-                            ] += (
+                            labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
                                 binim_yx * (count + 1)  # Prevent zeroing
                             )
 
@@ -337,12 +333,12 @@ class MaskSaver:
 
     def stack_masks(
         self,
-        masks,
-        mask_shape,
-        target,
-        ignored_dimensions=None,
-        check_overlaps=True,
-    ):
+        masks: List[omero.model.Mask],
+        mask_shape: Tuple[int, ...],
+        target: np.ndarray,
+        ignored_dimensions: Set[str] = None,
+        check_overlaps: bool = True,
+    ) -> None:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
@@ -350,7 +346,7 @@ class MaskSaver:
         :param target nd-array: The output array, pass this if you
             have already created the array and want to fill it.
         :param ignored_dimensions set(char): Ignore these dimensions and set
-            size to 1
+            size to 1.
         :param check_overlaps bool: Whether to check for overlapping masks or
             not
 
@@ -359,9 +355,12 @@ class MaskSaver:
         TODO: Move to https://github.com/ome/omero-rois/
         """
 
-        size_t, size_c, size_z, size_y, size_x = mask_shape
-        ignored_dimensions = ignored_dimensions or set()
-        mask_shape = tuple(mask_shape)
+        assert len(mask_shape) > 3
+        size_t: int = mask_shape[0]
+        size_c: int = mask_shape[1]
+        size_z: int = mask_shape[2]
+        if ignored_dimensions is None:
+            ignored_dimensions = set()
 
         if not target:
             raise Exception("No target")
@@ -370,32 +369,20 @@ class MaskSaver:
             if d in ignored_dimensions:
                 assert (
                     target.shape[DIMENSION_ORDER[d] + 1] == 1
-                ), "Ignored dimension {} should be size 1".format(d)
+                ), f"Ignored dimension {d} should be size 1"
             assert target.shape == tuple(
                 [len(masks)] + list(mask_shape)
-            ), "Invalid label shape: {}, expected {}".format(
-                target.shape, mask_shape
-            )
-            assert True
+            ), f"Invalid label shape: {target.shape}, expected {mask_shape}"
 
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
-            print(count)
             for mask in shapes:
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
-                for i_t in self._get_indices(
-                    ignored_dimensions, "T", t, size_t
-                ):
-                    for i_c in self._get_indices(
-                        ignored_dimensions, "C", c, size_c
-                    ):
+                for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
+                    for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
                         for i_z in self._get_indices(
                             ignored_dimensions, "Z", z, size_z
                         ):
                             target[
                                 count, i_t, i_c, i_z, y : (y + h), x : (x + w)
-                            ] += (
-                                binim_yx  # Here one could assign probabilities
-                            )
-
-        return target
+                            ] += binim_yx  # Here one could assign probabilities

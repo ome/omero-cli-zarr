@@ -1,12 +1,16 @@
+import argparse
 import os
+from typing import Any, Dict
 
+import numpy
+import numpy as np
 import omero.clients  # noqa
 from omero.rtypes import unwrap
-import numpy
-import zarr
+from zarr.hierarchy import open_group
+from zarr.storage import Group
 
 
-def image_to_zarr(image, args):
+def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
 
     cache_numpy = args.cache_numpy
     target_dir = args.output
@@ -19,9 +23,7 @@ def image_to_zarr(image, args):
 
     # dir for caching .npy planes
     if cache_numpy:
-        os.makedirs(
-            os.path.join(target_dir, str(image.id)), mode=511, exist_ok=True
-        )
+        os.makedirs(os.path.join(target_dir, str(image.id)), mode=511, exist_ok=True)
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     za = None
     pixels = image.getPrimaryPixels()
@@ -32,17 +34,14 @@ def image_to_zarr(image, args):
             for z in range(size_z):
                 # We only want to load from server if not cached locally
                 filename = os.path.join(
-                    target_dir,
-                    str(image.id),
-                    "{:03d}-{:03d}-{:03d}.npy".format(z, c, t),
+                    target_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
                 )
                 if not os.path.exists(filename):
                     zct_list.append((z, c, t))
 
-    def planeGen():
+    def planeGen() -> np.ndarray:
         planes = pixels.getPlanes(zct_list)
-        for p in planes:
-            yield p
+        yield from planes
 
     planes = planeGen()
 
@@ -50,9 +49,7 @@ def image_to_zarr(image, args):
         for c in range(size_c):
             for z in range(size_z):
                 filename = os.path.join(
-                    target_dir,
-                    str(image.id),
-                    "{:03d}-{:03d}-{:03d}.npy".format(z, c, t),
+                    target_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
                 )
                 if os.path.exists(filename):
                     print(f"plane (from disk) c:{c}, t:{t}, z:{z}")
@@ -66,7 +63,7 @@ def image_to_zarr(image, args):
                 if za is None:
                     # store = zarr.NestedDirectoryStore(name)
                     # root = zarr.group(store=store, overwrite=True)
-                    root = zarr.open_group(name, mode="w")
+                    root = open_group(name, mode="w")
                     za = root.create(
                         "0",
                         shape=(size_t, size_c, size_z, size_y, size_x),
@@ -78,30 +75,27 @@ def image_to_zarr(image, args):
     print("Created", name)
 
 
-def add_group_metadata(zarr_root, image, resolutions=1):
+def add_group_metadata(
+    zarr_root: Group, image: omero.gateway.Image, resolutions: int = 1
+) -> None:
 
     image_data = {
         "id": 1,
         "channels": [channelMarshal(c) for c in image.getChannels()],
         "rdefs": {
-            "model": (
-                image.isGreyscaleRenderingModel() and "greyscale" or "color"
-            ),
+            "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
     }
     multiscales = [
-        {
-            "version": "0.1",
-            "datasets": [{"path": str(r)} for r in range(resolutions)],
-        }
+        {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
     ]
     zarr_root.attrs["multiscales"] = multiscales
     zarr_root.attrs["omero"] = image_data
 
 
-def channelMarshal(channel):
+def channelMarshal(channel: omero.model.Channel) -> Dict[str, Any]:
     return {
         "label": channel.getLabel(),
         "color": channel.getColor().getHtml(),

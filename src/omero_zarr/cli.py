@@ -1,16 +1,16 @@
-import sys
+import argparse
 import subprocess
-from pathlib import Path
+import sys
 from functools import wraps
+from pathlib import Path
+from typing import Any, Callable
 
-from omero.cli import BaseControl
-from omero.cli import CLI
-from omero.cli import ProxyStringType
-from omero.gateway import BlitzGateway
+from omero.cli import CLI, BaseControl, Parser, ProxyStringType
+from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI
 
+from .masks import MASK_DTYPE_SIZE, image_masks_to_zarr
 from .raw_pixels import image_to_zarr
-from .masks import image_masks_to_zarr, MASK_DTYPE_SIZE
 
 HELP = """Export data in zarr format.
 
@@ -41,7 +41,7 @@ Options
 """
 
 
-def gateway_required(func):
+def gateway_required(func: Callable) -> Callable:
     """
   Decorator which initializes a client (self.client),
   a BlitzGateway (self.gateway), and makes sure that
@@ -49,7 +49,7 @@ def gateway_required(func):
   """
 
     @wraps(func)
-    def _wrapper(self, *args, **kwargs):
+    def _wrapper(self: Any, *args: Any, **kwargs: Any) -> Callable:
         self.client = self.ctx.conn(*args)
         self.gateway = BlitzGateway(client_obj=self.client)
 
@@ -59,7 +59,7 @@ def gateway_required(func):
             if self.gateway is not None:
                 self.gateway.close(hard=False)
                 self.gateway = None
-                self.client = None
+                self.client = None  # type: ignore
 
     return _wrapper
 
@@ -69,7 +69,7 @@ class ZarrControl(BaseControl):
     gateway = None
     client = None
 
-    def _configure(self, parser):
+    def _configure(self, parser: Parser) -> None:
         parser.add_login_arguments()
 
         parser.add_argument(
@@ -109,8 +109,7 @@ class ZarrControl(BaseControl):
         masks.add_argument(
             "--label-name",
             help=(
-                "Name of the array that will be stored. "
-                "Ignored for --style=split"
+                "Name of the array that will be stored. " "Ignored for --style=split"
             ),
             default="0",
         )
@@ -139,9 +138,7 @@ class ZarrControl(BaseControl):
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
-            "--bf",
-            action="store_true",
-            help="Use bioformats2raw to export the image.",
+            "--bf", action="store_true", help="Use bioformats2raw to export the image.",
         )
         export.add_argument(
             "--tile_width", default=None, help="For use with bioformats2raw"
@@ -156,13 +153,11 @@ class ZarrControl(BaseControl):
             "--max_workers", default=None, help="For use with bioformats2raw"
         )
         export.add_argument(
-            "object",
-            type=ProxyStringType("Image"),
-            help="The Image to export.",
+            "object", type=ProxyStringType("Image"), help="The Image to export.",
         )
 
     @gateway_required
-    def masks(self, args):
+    def masks(self, args: argparse.Namespace) -> None:
         """Export masks on the Image as zarr files."""
         if isinstance(args.object, ImageI):
             image_id = args.object.id
@@ -171,12 +166,14 @@ class ZarrControl(BaseControl):
             image_masks_to_zarr(image, args)
 
     @gateway_required
-    def export(self, args):
+    def export(self, args: argparse.Namespace) -> None:
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
             inplace = image.getInplaceImport()
 
             if args.bf:
+                if self.client is None:
+                    raise Exception("This cannot happen")  # mypy is confused
                 prx, desc = self.client.getManagedRepository(description=True)
                 repo_path = Path(desc._path._val) / Path(desc._name._val)
                 if inplace:
@@ -188,15 +185,17 @@ class ZarrControl(BaseControl):
             else:
                 image_to_zarr(image, args)
 
-    def _lookup(self, gateway, type, oid):
+    def _lookup(
+        self, gateway: BlitzGateway, otype: str, oid: int
+    ) -> BlitzObjectWrapper:
         """Find object of type by ID."""
         gateway.SERVICE_OPTS.setOmeroGroup("-1")
-        obj = gateway.getObject(type, oid)
+        obj = gateway.getObject(otype, oid)
         if not obj:
-            self.ctx.die(110, "No such %s: %s" % (type, oid))
+            self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(self, abs_path, args):
+    def _bf_export(self, abs_path: Path, args: argparse.Namespace) -> None:
         target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
         target.mkdir(exist_ok=True)
 
@@ -211,8 +210,7 @@ class ZarrControl(BaseControl):
             options += " --max_workers=" + args.max_workers
 
         self.ctx.dbg(
-            "bioformats2raw %s %s %s"
-            % (options, abs_path.resolve(), target.resolve())
+            f"bioformats2raw {options} {abs_path.resolve()} {target.resolve()}"
         )
         process = subprocess.Popen(
             ["bioformats2raw", options, abs_path.resolve(), target.resolve()],
@@ -223,11 +221,11 @@ class ZarrControl(BaseControl):
         if stderr:
             self.ctx.err(stderr)
         else:
-            self.ctx.out("Image exported to {}".format(target.resolve()))
+            self.ctx.out(f"Image exported to {target.resolve()}")
 
 
 try:
-    register("zarr", ZarrControl, HELP)
+    register("zarr", ZarrControl, HELP)  # type: ignore
 except NameError:
     if __name__ == "__main__":
         cli = CLI()
