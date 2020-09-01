@@ -309,7 +309,7 @@ class MaskSaver:
                                 )
                             ):
                                 raise Exception(
-                                    f"Mask {count} overlaps " "with existing labels"
+                                    f"Mask {count} overlaps with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous masks

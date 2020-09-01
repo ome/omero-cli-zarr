@@ -107,9 +107,7 @@ class ZarrControl(BaseControl):
         )
         masks.add_argument(
             "--label-name",
-            help=(
-                "Name of the array that will be stored. " "Ignored for --style=split"
-            ),
+            help=("Name of the array that will be stored. Ignored for --style=split"),
             default="0",
         )
         masks.add_argument(
