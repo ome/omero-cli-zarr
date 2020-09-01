@@ -35,7 +35,7 @@ def image_masks_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) ->
 
     conn = image._conn
     roi_service = conn.getRoiService()
-    result = roi_service.findByImage(image.id, None)
+    result = roi_service.findByImage(image.id, None, {"omero.group": "-1"})
 
     masks = {}
     shape_count = 0
