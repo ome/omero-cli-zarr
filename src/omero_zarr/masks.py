@@ -7,7 +7,7 @@ import numpy as np
 import omero.clients  # noqa
 from ome_zarr.data import write_multiscale
 from ome_zarr.io import parse_url
-from ome_zarr.reader import Layer, Multiscales
+from ome_zarr.reader import Multiscales, Node
 from ome_zarr.scale import Scaler
 from omero.model import MaskI
 from omero.rtypes import unwrap
@@ -148,7 +148,7 @@ class MaskSaver:
 
         src = parse_url(source_image)
         assert src
-        input_pyramid = Layer(src, [])
+        input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales)
         input_pyramid_levels = len(input_pyramid.data)
 
