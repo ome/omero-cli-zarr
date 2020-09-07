@@ -2,7 +2,7 @@ OMERO CLI Zarr plugin
 =====================
 
 This OMERO command-line plugin allows you to export images from
-OMERO as zarr files, according to the spec at 
+OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md.
 
 These are 5D arrays of shape `(t, c, z, y, x)`.
@@ -27,7 +27,7 @@ To export images via the OMERO API:
 $ omero zarr export Image:1
 
 # Specify an output directory
-$ omero zarr export Image:1 --output /home/user/zarr_files
+$ omero zarr --output /home/user/zarr_files export Image:1
 
 # Cache each plane as a numpy file.npy. If connection is lost, and you need
 # to export again, we can use these instead of downloading again
@@ -41,7 +41,7 @@ To export images via bioformats2raw we use the ```--bf``` flag:
 export MANAGED_REPO=/var/omero/data/ManagedRepository
 export BF2RAW=/opt/tools/bioformats2raw-0.2.0-SNAPSHOT
 
-$ omero zarr export 1 --bf --output /home/user/zarr_files
+$ omero zarr --output /home/user/zarr_files export 1 --bf
 Image exported to /home/user/zarr_files/2chZT.lsm
 ```
 
@@ -49,7 +49,7 @@ To export masks for an Image:
 
 ```
 # Saved under zarr_files/1.zarr/labels/0
-$ omero zarr masks Image:1 --output /home/user/zarr_files
+$ omero zarr --output /home/user/zarr_files masks Image:1
 
 # Specify the label-path (default 'labels').
 # e.g. Export to 1.zarr/my_labels:

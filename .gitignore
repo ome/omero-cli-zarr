@@ -1,6 +1,7 @@
 venv/
 .idea/
 *.iml
+*egg-info
 build/
 dist/
-src/__pycache__/
+__pycache__
