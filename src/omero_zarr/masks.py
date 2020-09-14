@@ -5,10 +5,12 @@ from typing import Dict, List, Set, Tuple
 
 import numpy as np
 import omero.clients  # noqa
+from ome_zarr.conversions import int_to_rgba_255
 from ome_zarr.data import write_multiscale
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Multiscales, Node
 from ome_zarr.scale import Scaler
+from ome_zarr.types import JSONDict
 from omero.model import MaskI
 from omero.rtypes import unwrap
 from zarr.convenience import open as zarr_open
@@ -147,9 +149,9 @@ class MaskSaver:
             source_image_link = "../.."  # Drop "labels/0"
 
         src = parse_url(source_image)
-        assert src
+        assert src, "Source image does not exist"
         input_pyramid = Node(src, [])
-        assert input_pyramid.load(Multiscales)
+        assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
         root = zarr_open(filename)
@@ -165,34 +167,34 @@ class MaskSaver:
         del _mask_shape
         print(f"Ignoring dimensions {ignored_dimensions}")
 
-        if self.style in ("labeled", "split"):
-
-            labels, fill_colors = self.masks_to_labels(
-                masks, mask_shape, ignored_dimensions, check_overlaps=True,
-            )
-            scaler = Scaler(max_layer=input_pyramid_levels)
-            label_pyramid = scaler.nearest(labels)
-            pyramid_grp = out_labels.create_group(name)
-            if fill_colors:
-                pyramid_grp.attrs["color"] = fill_colors  # TODO: move to method
-            write_multiscale(
-                label_pyramid, pyramid_grp
-            )  # TODO: dtype, chunks, overwite
-
-        else:
+        if self.style not in ("labeled", "split"):
             assert False, "6d has been removed"
 
-        pyramid_grp.attrs["image"] = {
-            "array": source_image_link,
-            "source": {
-                # 'ts': [],
-                # 'cs': [],
-                # 'zs': [],
-                # 'ys': [],
-                # 'xs': [],
-            },
-        }
+        # Create and store binary data
+        labels, fill_colors = self.masks_to_labels(
+            masks, mask_shape, ignored_dimensions, check_overlaps=True,
+        )
+        scaler = Scaler(max_layer=input_pyramid_levels)
+        label_pyramid = scaler.nearest(labels)
+        pyramid_grp = out_labels.create_group(name)
+        write_multiscale(label_pyramid, pyramid_grp)  # TODO: dtype, chunks, overwite
 
+        # Specify and store metadata
+        image_label_colors: List[JSONDict] = []
+        image_label = {
+            "version": "0.1",
+            "colors": image_label_colors,
+            "source": {"image": source_image_link},
+        }
+        if fill_colors:
+            for label_value, rgba_int in sorted(fill_colors.items()):
+                image_label_colors.append(
+                    {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
+                )
+        # TODO: move to write method
+        pyramid_grp.attrs["image-label"] = image_label
+
+        # Register with labels metadata
         print(f"Created {filename}/{self.path}/{name}")
         attrs = out_labels.attrs.asdict()
         # TODO: could temporarily support "masks" here as well
