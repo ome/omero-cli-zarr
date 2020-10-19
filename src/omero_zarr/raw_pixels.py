@@ -126,9 +126,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     wells = {}
     for well in plate.listChildren():
-        pos = well.getWellPos()
-        row = pos[0]
-        col = pos[1:]
+        row = plate.getRowLabels()[well.row]
+        col = plate.getColumnLabels()[well.column]
         if row not in wells:
             wells[row] = {}
         wells[row][col] = well
@@ -144,12 +143,14 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             well = row_wells[col]
             col_group = row_group.create_group(col)
             for field in range(n_fields[0], n_fields[1] + 1):
-                add_image(well.getImage(field), col_group, "Field_{}".format(field + 1))
                 count += 1
-                status = "row={}, col={}, field={} ({:.2f}% done)".format(
-                    row, col, field, (count * 100 / total)
-                )
-                print(status, end="\r", flush=True)
+                image = well.getImage(field)
+                if image:
+                    add_image(image, col_group, "Field_{}".format(field + 1))
+                    status = "row={}, col={}, field={} ({:.2f}% done)".format(
+                        row, col, field, (count * 100 / total)
+                    )
+                    print(status, end="\r", flush=True)
 
 
 def add_group_metadata(
