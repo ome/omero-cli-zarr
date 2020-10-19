@@ -7,7 +7,7 @@ import numpy as np
 import omero.clients  # noqa
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
-
+from natsort import natsorted
 
 def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
 
@@ -72,6 +72,81 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
                 za[t, c, z, :, :] = plane
         add_group_metadata(root, image)
     print("Created", name)
+
+def add_image(image: omero.gateway.Image, parent: Group, field_index = "0") -> None:
+    """Adds the image pixel data as array to the given parent zarr group."""
+    size_c = image.getSizeC()
+    size_z = image.getSizeZ()
+    size_x = image.getSizeX()
+    size_y = image.getSizeY()
+    size_t = image.getSizeT()
+    d_type = image.getPixelsType()
+
+    group = parent.create(
+        field_index,
+        shape=(size_t, size_c, size_z, size_y, size_x),
+        chunks=(1, 1, 1, size_y, size_x),
+        dtype=d_type,
+    )
+
+    zct_list = []
+    for t in range(size_t):
+        for c in range(size_c):
+            for z in range(size_z):
+                zct_list.append((z, c, t))
+
+    pixels = image.getPrimaryPixels()
+    def planeGen() -> np.ndarray:
+        planes = pixels.getPlanes(zct_list)
+        yield from planes
+
+    planes = planeGen()
+
+    for t in range(size_t):
+        for c in range(size_c):
+            for z in range(size_z):
+                plane = next(planes)
+                group[t, c, z, :, :] = plane
+
+
+def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
+    """
+       Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
+       https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
+    """
+    gs = plate.getGridSize()
+    n_rows = gs['rows']
+    n_cols = gs['columns']
+    n_fields = plate.getNumberOfFields()
+    total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
+    print("Plate size: rows={} x cols={} x fields={}".format(n_rows, n_cols, n_fields))
+
+    wells = {}
+    for well in plate.listChildren():
+        pos = well.getWellPos()
+        row = pos[0]
+        col = pos[1:]
+        if row not in wells:
+            wells[row] = {}
+        wells[row][col] = well
+
+    target_dir = args.output
+    name = os.path.join(target_dir, "%s.zarr" % plate.id)
+    root = open_group(name, mode="w")
+    count = 0
+    for row in natsorted(wells.keys()):
+        row_wells = wells[row]
+        well_group = root.create_group(row)
+        for col in natsorted(row_wells.keys()):
+            well = row_wells[col]
+            col_group = well_group.create_group(col)
+            for field in range(n_fields[0], n_fields[1] + 1):
+                add_image(well.getImage(field), col_group,
+                          "Field_{}".format(field + 1))
+                count += 1
+                status = "row={}, col={}, field={} ({:.2f}% done)"\
+                    .format(row, col, field, (count*100/total))
+                print(status, end="\r", flush=True)
 
 
 def add_group_metadata(
