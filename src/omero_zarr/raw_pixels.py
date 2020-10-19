@@ -137,10 +137,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     count = 0
     for row in natsorted(wells.keys()):
         row_wells = wells[row]
-        well_group = root.create_group(row)
+        row_group = root.create_group(row)
         for col in natsorted(row_wells.keys()):
             well = row_wells[col]
-            col_group = well_group.create_group(col)
+            col_group = row_group.create_group(col)
             for field in range(n_fields[0], n_fields[1] + 1):
                 add_image(well.getImage(field), col_group, "Field_{}".format(field + 1))
                 count += 1
