@@ -5,9 +5,10 @@ from typing import Any, Dict
 import numpy
 import numpy as np
 import omero.clients  # noqa
+from natsort import natsorted
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
-from natsort import natsorted
+
 
 def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
 
@@ -73,7 +74,7 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
         add_group_metadata(root, image)
     print("Created", name)
 
-def add_image(image: omero.gateway.Image, parent: Group, field_index = "0") -> None:
+def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> None:
     """Adds the image pixel data as array to the given parent zarr group."""
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -115,11 +116,11 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
        https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
     """
     gs = plate.getGridSize()
-    n_rows = gs['rows']
-    n_cols = gs['columns']
+    n_rows = gs["rows"]
+    n_cols = gs["columns"]
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
-    print("Plate size: rows={} x cols={} x fields={}".format(n_rows, n_cols, n_fields))
+    print(f"Plate size: rows={n_rows} x cols={n_cols} x fields={n_fields}")
 
     wells = {}
     for well in plate.listChildren():
@@ -141,11 +142,11 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             well = row_wells[col]
             col_group = well_group.create_group(col)
             for field in range(n_fields[0], n_fields[1] + 1):
-                add_image(well.getImage(field), col_group,
-                          "Field_{}".format(field + 1))
+                add_image(well.getImage(field), col_group, "Field_{}".format(field + 1))
                 count += 1
-                status = "row={}, col={}, field={} ({:.2f}% done)"\
-                    .format(row, col, field, (count*100/total))
+                status = "row={}, col={}, field={} ({:.2f}% done)".format(
+                    row, col, field, (count * 100 / total)
+                )
                 print(status, end="\r", flush=True)
 
 
