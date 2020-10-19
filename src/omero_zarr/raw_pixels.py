@@ -74,6 +74,7 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
         add_group_metadata(root, image)
     print("Created", name)
 
+
 def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> None:
     """Adds the image pixel data as array to the given parent zarr group."""
     size_c = image.getSizeC()
@@ -97,6 +98,7 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
                 zct_list.append((z, c, t))
 
     pixels = image.getPrimaryPixels()
+
     def planeGen() -> np.ndarray:
         planes = pixels.getPlanes(zct_list)
         yield from planes
