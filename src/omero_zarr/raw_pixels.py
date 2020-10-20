@@ -101,12 +101,7 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
 
     planes = planeGen()
 
-
-    multiscales = []
-
-    field_groups = []
-
-    # Target size
+    # Target size for smallest multiresolution
     TARGET_SIZE = 96
     level_count = 1
     longest = max(size_x, size_y)
@@ -114,15 +109,9 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
         longest = longest // 2
         level_count += 1
 
-    for level in range(level_count):
-        multiscales.append({
-            "datasets": [{
-                "path": str(level),
-            }],
-            "version": "0.1"
-        })
-    field_group.attrs['multiscales'] = multiscales
+    add_group_metadata(field_group, image, level_count)
 
+    field_groups = []
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
