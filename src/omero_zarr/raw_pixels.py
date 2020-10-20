@@ -8,6 +8,7 @@ import omero.clients  # noqa
 import time
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
+import cv2
 
 
 def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
@@ -84,12 +85,7 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
     size_t = image.getSizeT()
     d_type = image.getPixelsType()
 
-    group = parent.create(
-        field_index,
-        shape=(size_t, size_c, size_z, size_y, size_x),
-        chunks=(1, 1, 1, size_y, size_x),
-        dtype=d_type,
-    )
+    field_group = parent.require_group(field_index)
 
     zct_list = []
     for t in range(size_t):
@@ -105,11 +101,55 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
 
     planes = planeGen()
 
+
+    multiscales = []
+
+    field_groups = []
+
+    # Target size
+    TARGET_SIZE = 96
+    level_count = 1
+    longest = max(size_x, size_y)
+    while longest > TARGET_SIZE:
+        longest = longest // 2
+        level_count += 1
+
+    for level in range(level_count):
+        multiscales.append({
+            "datasets": [{
+                "path": str(level),
+            }],
+            "version": "0.1"
+        })
+    field_group.attrs['multiscales'] = multiscales
+
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
                 plane = next(planes)
-                group[t, c, z, :, :] = plane
+                for level in range(level_count):
+                    size_y = plane.shape[0]
+                    size_x = plane.shape[1]
+                    # If on first plane, create a new group for this resolution level
+                    if t == 0 and c == 0 and z == 0:
+                        field_groups.append(field_group.create(
+                            str(level),
+                            shape=(size_t, size_c, size_z, size_y, size_x),
+                            chunks=(1, 1, 1, size_y, size_x),
+                            dtype=d_type,
+                        ))
+
+                    # field_group = field_groups[level]
+                    field_groups[level][t, c, z, :, :] = plane
+
+                    if (level + 1) < level_count:
+                        # resize for next level...
+                        plane = cv2.resize(
+                            plane,
+                            dsize=(size_x // 2, size_y // 2),
+                            interpolation=cv2.INTER_NEAREST,
+                        )
+
 
 def print_status(t0, t, count, total):
     """ Prints percent done and ETA """
