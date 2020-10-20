@@ -5,7 +5,7 @@ from typing import Any, Dict
 import numpy
 import numpy as np
 import omero.clients  # noqa
-from natsort import natsorted
+import time
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
 
@@ -111,6 +111,15 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
                 plane = next(planes)
                 group[t, c, z, :, :] = plane
 
+def print_status(t0, t, count, total):
+    """ Prints percent done and ETA """
+    percent_done = count * 100 / total
+    rate = count / (t - t0)
+    eta = (total - count) / rate
+    status = "{:.2f}% done, ETA: {}".format(
+        percent_done, time.strftime('%H:%M:%S', time.gmtime(eta))
+    )
+    print(status, end="\r", flush=True)
 
 def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
     """
@@ -122,35 +131,34 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_cols = gs["columns"]
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
-    print(f"Plate size: rows={n_rows} x cols={n_cols} x fields={n_fields}")
-
-    wells = {}
-    for well in plate.listChildren():
-        row = plate.getRowLabels()[well.row]
-        col = plate.getColumnLabels()[well.column]
-        if row not in wells:
-            wells[row] = {}
-        wells[row][col] = well
 
     target_dir = args.output
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
+    print("Exporting to {}".format(name))
     root = open_group(name, mode="w")
+    root.attrs["rows"] = n_rows
+    root.attrs["columns"] = n_cols
+
     count = 0
-    for row in natsorted(wells.keys()):
-        row_wells = wells[row]
-        row_group = root.create_group(row)
-        for col in natsorted(row_wells.keys()):
-            well = row_wells[col]
-            col_group = row_group.create_group(col)
-            for field in range(n_fields[0], n_fields[1] + 1):
-                count += 1
-                image = well.getImage(field)
-                if image:
-                    add_image(image, col_group, "Field_{}".format(field + 1))
-                    status = "row={}, col={}, field={} ({:.2f}% done)".format(
-                        row, col, field, (count * 100 / total)
-                    )
-                    print(status, end="\r", flush=True)
+    t0 = time.time()
+
+    for well in plate.listChildren():
+        row = plate.getRowLabels()[well.row]
+        col = plate.getColumnLabels()[well.column]
+        for field in range(n_fields[0], n_fields[1] + 1):
+            ws = well.getWellSample(field)
+            field_name = "Field_{}".format(field + 1)
+            count += 1
+            if ws and ws.getImage():
+                img = ws.getImage()
+                ac = ws.getPlateAcquisition()
+                ac_name = ac.getName() if ac else "0"
+                ac_group = root.require_group(ac_name)
+                row_group = ac_group.require_group(row)
+                col_group = row_group.require_group(col)
+                add_image(img, col_group, field_name)
+            print_status(t0, time.time(), count, total)
+    print("Finished.")
 
 
 def add_group_metadata(
