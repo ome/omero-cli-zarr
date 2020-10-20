@@ -136,9 +136,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
     print("Exporting to {}".format(name))
     root = open_group(name, mode="w")
-    plate_metadata = [
-        {"rows": n_rows, "columns": n_cols}
-    ]
+    plate_metadata = {
+        "rows": n_rows,
+        "columns": n_cols
+    }
     root.attrs["plate"] = plate_metadata
 
     count = 0
