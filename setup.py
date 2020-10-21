@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name="omero-cli-zarr",
-    version="0.0.1",
+    version="0.1.0.dev0",
     packages=["omero_zarr", "omero.plugins"],
     package_dir={"": "src"},
     description="Plugin for exporting images in zarr format.",
@@ -15,8 +15,7 @@ setup(
         "Intended Audience :: Developers",
         "Intended Audience :: End Users/Desktop",
         "Intended Audience :: Information Technology",
-        "License :: OSI Approved :: GNU General Public License v2 "
-        "or later (GPLv2+)",
+        "License :: OSI Approved :: GNU General Public License v2 " "or later (GPLv2+)",
         "Natural Language :: English",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
