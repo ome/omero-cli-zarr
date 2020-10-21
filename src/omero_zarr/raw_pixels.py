@@ -5,8 +5,10 @@ from typing import Any, Dict
 import numpy
 import numpy as np
 import omero.clients  # noqa
+import time
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
+import cv2
 
 
 def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
@@ -72,6 +74,123 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
                 za[t, c, z, :, :] = plane
         add_group_metadata(root, image)
     print("Created", name)
+
+
+def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> None:
+    """Adds the image pixel data as array to the given parent zarr group."""
+    size_c = image.getSizeC()
+    size_z = image.getSizeZ()
+    size_x = image.getSizeX()
+    size_y = image.getSizeY()
+    size_t = image.getSizeT()
+    d_type = image.getPixelsType()
+
+    field_group = parent.require_group(field_index)
+
+    zct_list = []
+    for t in range(size_t):
+        for c in range(size_c):
+            for z in range(size_z):
+                zct_list.append((z, c, t))
+
+    pixels = image.getPrimaryPixels()
+
+    def planeGen() -> np.ndarray:
+        planes = pixels.getPlanes(zct_list)
+        yield from planes
+
+    planes = planeGen()
+
+    # Target size for smallest multiresolution
+    TARGET_SIZE = 96
+    level_count = 1
+    longest = max(size_x, size_y)
+    while longest > TARGET_SIZE:
+        longest = longest // 2
+        level_count += 1
+
+    add_group_metadata(field_group, image, level_count)
+
+    field_groups = []
+    for t in range(size_t):
+        for c in range(size_c):
+            for z in range(size_z):
+                plane = next(planes)
+                for level in range(level_count):
+                    size_y = plane.shape[0]
+                    size_x = plane.shape[1]
+                    # If on first plane, create a new group for this resolution level
+                    if t == 0 and c == 0 and z == 0:
+                        field_groups.append(field_group.create(
+                            str(level),
+                            shape=(size_t, size_c, size_z, size_y, size_x),
+                            chunks=(1, 1, 1, size_y, size_x),
+                            dtype=d_type,
+                        ))
+
+                    # field_group = field_groups[level]
+                    field_groups[level][t, c, z, :, :] = plane
+
+                    if (level + 1) < level_count:
+                        # resize for next level...
+                        plane = cv2.resize(
+                            plane,
+                            dsize=(size_x // 2, size_y // 2),
+                            interpolation=cv2.INTER_NEAREST,
+                        )
+
+
+def print_status(t0, t, count, total):
+    """ Prints percent done and ETA """
+    percent_done = count * 100 / total
+    rate = count / (t - t0)
+    eta = (total - count) / rate
+    status = "{:.2f}% done, ETA: {}".format(
+        percent_done, time.strftime('%H:%M:%S', time.gmtime(eta))
+    )
+    print(status, end="\r", flush=True)
+
+def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
+    """
+       Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
+       https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
+    """
+    gs = plate.getGridSize()
+    n_rows = gs["rows"]
+    n_cols = gs["columns"]
+    n_fields = plate.getNumberOfFields()
+    total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
+
+    target_dir = args.output
+    name = os.path.join(target_dir, "%s.zarr" % plate.id)
+    print("Exporting to {}".format(name))
+    root = open_group(name, mode="w")
+    plate_metadata = {
+        "rows": n_rows,
+        "columns": n_cols
+    }
+    root.attrs["plate"] = plate_metadata
+
+    count = 0
+    t0 = time.time()
+
+    for well in plate.listChildren():
+        row = plate.getRowLabels()[well.row]
+        col = plate.getColumnLabels()[well.column]
+        for field in range(n_fields[0], n_fields[1] + 1):
+            ws = well.getWellSample(field)
+            field_name = "Field_{}".format(field + 1)
+            count += 1
+            if ws and ws.getImage():
+                img = ws.getImage()
+                ac = ws.getPlateAcquisition()
+                ac_name = ac.getName() if ac else "0"
+                ac_group = root.require_group(ac_name)
+                row_group = ac_group.require_group(row)
+                col_group = row_group.require_group(col)
+                add_image(img, col_group, field_name)
+            print_status(t0, time.time(), count, total)
+    print("Finished.")
 
 
 def add_group_metadata(

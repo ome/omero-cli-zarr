@@ -7,10 +7,10 @@ from typing import Any, Callable
 
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
-from omero.model import ImageI
+from omero.model import ImageI, PlateI
 
 from .masks import MASK_DTYPE_SIZE, image_masks_to_zarr
-from .raw_pixels import image_to_zarr
+from .raw_pixels import image_to_zarr, plate_to_zarr
 
 HELP = """Export data in zarr format.
 
@@ -181,6 +181,9 @@ class ZarrControl(BaseControl):
                         self._bf_export(repo_path / p, args)
             else:
                 image_to_zarr(image, args)
+        elif isinstance(args.object, PlateI):
+            plate = self._lookup(self.gateway, "Plate", args.object.id)
+            plate_to_zarr(plate, args)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
