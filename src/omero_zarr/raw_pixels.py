@@ -10,6 +10,8 @@ import omero.clients  # noqa
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
 
+from . import __version__
+
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
@@ -209,6 +211,7 @@ def add_group_metadata(
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
+        "_creator": f"omero-zarr {__version__}",
     }
     multiscales = [
         {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
