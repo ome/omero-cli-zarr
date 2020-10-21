@@ -1,3 +1,3 @@
-from omero_zarr.cli import ZarrControl, HELP
+from omero_zarr.cli import HELP, ZarrControl
 
-register("zarr", ZarrControl, HELP)  # noqa
+register("zarr", ZarrControl, HELP)  # type: ignore # noqa

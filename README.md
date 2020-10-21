@@ -2,7 +2,7 @@ OMERO CLI Zarr plugin
 =====================
 
 This OMERO command-line plugin allows you to export images from
-OMERO as zarr files, according to the spec at 
+OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md.
 
 These are 5D arrays of shape `(t, c, z, y, x)`.
@@ -27,7 +27,7 @@ To export images via the OMERO API:
 $ omero zarr export Image:1
 
 # Specify an output directory
-$ omero zarr export Image:1 --output /home/user/zarr_files
+$ omero zarr --output /home/user/zarr_files export Image:1
 
 # Cache each plane as a numpy file.npy. If connection is lost, and you need
 # to export again, we can use these instead of downloading again
@@ -41,31 +41,31 @@ To export images via bioformats2raw we use the ```--bf``` flag:
 export MANAGED_REPO=/var/omero/data/ManagedRepository
 export BF2RAW=/opt/tools/bioformats2raw-0.2.0-SNAPSHOT
 
-$ omero zarr export 1 --bf --output /home/user/zarr_files
+$ omero zarr --output /home/user/zarr_files export 1 --bf
 Image exported to /home/user/zarr_files/2chZT.lsm
 ```
 
 To export masks for an Image:
 
 ```
-# Saved under zarr_files/1.zarr/masks/0
-$ omero zarr masks Image:1 --output /home/user/zarr_files
+# Saved under zarr_files/1.zarr/labels/0
+$ omero zarr --output /home/user/zarr_files masks Image:1
 
-# Specify the mask-path (default 'masks').
-# e.g. Export to 1.zarr/my_masks:
-$ omero zarr masks Image:1 --mask-path=my_masks
+# Specify the label-path (default 'labels').
+# e.g. Export to 1.zarr/my_labels:
+$ omero zarr labels Image:1 --label-path=my_labels
 
-# Specify the mask-name. (default is '0')
-# e.g. Export to 1.zarr/masks/A
-$ omero zarr masks Image:1 --mask-name=A
+# Specify the label-name. (default is '0')
+# e.g. Export to 1.zarr/labels/A
+$ omero zarr labels Image:1 --label-name=A
 ```
 
 The default behaviour is to export all masks on the Image to a single 5D
-"labelled" zarr array, with a different value for each mask Shape.
+"labeled" zarr array, with a different value for each mask Shape.
 An exception will be thrown if any of the masks overlap.
 
 To handle overlapping masks, split masks into non-overlapping zarr groups
-using a "mask-map" which is a csv file of that specifies the name of
+using a "label-map" which is a csv file of that specifies the name of
 the zarr group for each ROI on the Image. Columns are ID, NAME, ROI_ID.
 
 For example, to create a group from the `textValue` of each Shape,
@@ -88,8 +88,8 @@ This creates a file `5514375.rois` like this:
 ...
 ```
 
-This will create zarr groups of `Cell` and `Chromosomes` under `5514375.zarr/masks/`:
+This will create zarr groups of `Cell` and `Chromosomes` under `5514375.zarr/labels/`:
 
 ```
-$ omero zarr masks Image:5514375 --mask-map=5514375.rois
+$ omero zarr masks Image:5514375 --label-map=5514375.rois
 ```
