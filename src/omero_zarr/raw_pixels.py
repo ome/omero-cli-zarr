@@ -165,7 +165,7 @@ def print_status(t0: float, t: float, count: float, total: float) -> None:
 
 
 def add_group_metadata(
-    zarr_root: Group, image: omero.gateway.Image, resolutions: int = 1
+    zarr_root: Group, image: omero.gateway.ImageWrapper, resolutions: int = 1
 ) -> None:
 
     image_data = {
