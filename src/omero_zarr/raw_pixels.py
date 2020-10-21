@@ -1,17 +1,17 @@
 import argparse
 import os
+import time
 from typing import Any, Dict
 
+import cv2
 import numpy
 import numpy as np
 import omero.clients  # noqa
-import time
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
-import cv2
 
 
-def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
+def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
 
     cache_numpy = args.cache_numpy
     target_dir = args.output
@@ -76,7 +76,9 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
     print("Created", name)
 
 
-def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> None:
+def add_image(
+    image: omero.gateway.ImageWrapper, parent: Group, field_index: str = "0"
+) -> None:
     """Adds the image pixel data as array to the given parent zarr group."""
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -121,12 +123,14 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
                     size_x = plane.shape[1]
                     # If on first plane, create a new group for this resolution level
                     if t == 0 and c == 0 and z == 0:
-                        field_groups.append(field_group.create(
-                            str(level),
-                            shape=(size_t, size_c, size_z, size_y, size_x),
-                            chunks=(1, 1, 1, size_y, size_x),
-                            dtype=d_type,
-                        ))
+                        field_groups.append(
+                            field_group.create(
+                                str(level),
+                                shape=(size_t, size_c, size_z, size_y, size_x),
+                                chunks=(1, 1, 1, size_y, size_x),
+                                dtype=d_type,
+                            )
+                        )
 
                     # field_group = field_groups[level]
                     field_groups[level][t, c, z, :, :] = plane
@@ -140,15 +144,16 @@ def add_image(image: omero.gateway.Image, parent: Group, field_index="0") -> Non
                         )
 
 
-def print_status(t0, t, count, total):
+def print_status(t0: float, t: float, count: int, total: int) -> None:
     """ Prints percent done and ETA """
     percent_done = count * 100 / total
     rate = count / (t - t0)
     eta = (total - count) / rate
     status = "{:.2f}% done, ETA: {}".format(
-        percent_done, time.strftime('%H:%M:%S', time.gmtime(eta))
+        percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
     )
     print(status, end="\r", flush=True)
+
 
 def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
     """
@@ -163,12 +168,9 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     target_dir = args.output
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
-    print("Exporting to {}".format(name))
+    print(f"Exporting to {name}")
     root = open_group(name, mode="w")
-    plate_metadata = {
-        "rows": n_rows,
-        "columns": n_cols
-    }
+    plate_metadata = {"rows": n_rows, "columns": n_cols}
     root.attrs["plate"] = plate_metadata
 
     count = 0
@@ -194,7 +196,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_group_metadata(
-    zarr_root: Group, image: omero.gateway.Image, resolutions: int = 1
+    zarr_root: Group, image: omero.gateway.ImageWrapper, resolutions: int = 1
 ) -> None:
 
     image_data = {

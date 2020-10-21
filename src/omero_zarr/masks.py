@@ -33,7 +33,9 @@ MASK_DTYPE_SIZE: Dict[int, np.dtype] = {
 }
 
 
-def image_masks_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
+def image_masks_to_zarr(
+    image: omero.gateway.ImageWrapper, args: argparse.Namespace
+) -> None:
 
     conn = image._conn
     roi_service = conn.getRoiService()
@@ -99,7 +101,7 @@ class MaskSaver:
 
     def __init__(
         self,
-        image: omero.gateway.Image,
+        image: omero.gateway.ImageWrapper,
         dtype: np.dtype,
         path: str = "labels",
         style: str = "labeled",
