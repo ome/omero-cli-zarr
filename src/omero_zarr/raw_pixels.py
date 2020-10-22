@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import cv2
 import numpy
@@ -23,13 +23,19 @@ def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
     print("Finished.")
 
 
-def add_image(image: omero.gateway.Image, parent: Group, cache_dir: str = None) -> int:
+def add_image(
+    image: omero.gateway.Image, parent: Group, cache_dir: Optional[str] = None
+) -> int:
     """ Adds the image pixel data as array to the given parent zarr group.
         Optionally caches the pixel data in the given cache_dir directory.
         Returns the number of resolution levels generated for the image.
     """
     if cache_dir is not None:
+        cache = True
         os.makedirs(os.path.join(cache_dir, str(image.id)), mode=511, exist_ok=True)
+    else:
+        cache = False
+        cache_dir = ""
 
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -42,12 +48,14 @@ def add_image(image: omero.gateway.Image, parent: Group, cache_dir: str = None) 
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
-                if cache_dir is not None:
+                if cache:
                     # We only want to load from server if not cached locally
                     filename = os.path.join(
                         cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
                     )
-                if cache_dir is None or not os.path.exists(filename):
+                    if not os.path.exists(filename):
+                        zct_list.append((z, c, t))
+                else:
                     zct_list.append((z, c, t))
 
     pixels = image.getPrimaryPixels()
@@ -70,19 +78,17 @@ def add_image(image: omero.gateway.Image, parent: Group, cache_dir: str = None) 
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
-                filename = (
-                    os.path.join(
+                if cache:
+                    filename = os.path.join(
                         cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
                     )
-                    if cache_dir is not None
-                    else None
-                )
-                if filename and os.path.exists(filename):
-                    plane = numpy.load(filename)
+                    if os.path.exists(filename):
+                        plane = numpy.load(filename)
+                    else:
+                        plane = next(planes)
+                        numpy.save(filename, plane)
                 else:
                     plane = next(planes)
-                    if cache_dir is not None:
-                        numpy.save(filename, plane)
                 for level in range(level_count):
                     size_y = plane.shape[0]
                     size_x = plane.shape[1]
@@ -149,15 +155,20 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 field_group = col_group.require_group(field_name)
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
-            print_status(t0, time.time(), count, total)
+            print_status(int(t0), int(time.time()), count, total)
     print("Finished.")
 
 
-def print_status(t0: float, t: float, count: float, total: float) -> None:
-    """ Prints percent done and ETA """
-    percent_done = count * 100 / total
-    rate = count / (t - t0)
-    eta = (total - count) / rate
+def print_status(t0: int, t: int, count: int, total: int) -> None:
+    """ Prints percent done and ETA.
+        t0: start timestamp in seconds
+        t: current timestamp in seconds
+        count: number of tasks done
+        total: total number of tasks
+    """
+    percent_done = float(count) * 100 / total
+    rate = float(count) / (t - t0)
+    eta = float(total - count) / rate
     status = "{:.2f}% done, ETA: {}".format(
         percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
     )
