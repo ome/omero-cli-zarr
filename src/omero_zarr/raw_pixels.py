@@ -9,7 +9,7 @@ import numpy as np
 import omero.clients  # noqa
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
-
+import json
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
@@ -132,15 +132,19 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
     print(f"Exporting to {name}")
     root = open_group(name, mode="w")
-    plate_metadata = {"rows": n_rows, "columns": n_cols}
-    root.attrs["plate"] = plate_metadata
 
     count = 0
     t0 = time.time()
 
+    row_names = set()
+    col_names = set()
+    ac_names = set()
+
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
+        row_names.add(row)
+        col_names.add(col)
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
             field_name = "Field_{}".format(field + 1)
@@ -149,6 +153,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 img = ws.getImage()
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
+                ac_names.add(ac_name)
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
                 col_group = row_group.require_group(col)
@@ -156,6 +161,14 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
             print_status(int(t0), int(time.time()), count, total)
+
+    plate_metadata = {"rows": n_rows,
+                      "columns": n_cols,
+                      "row_names": list(row_names),
+                      "col_names": list(col_names),
+                      "plateAcquisitions": dict(("path", x) for x in ac_names)
+                      }
+    root.attrs["plate"] = plate_metadata
     print("Finished.")
 
 
