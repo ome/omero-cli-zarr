@@ -22,6 +22,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     root = open_group(name, mode="w")
     n_levels = add_image(image, root, cache_dir=cache_dir)
     add_group_metadata(root, image, n_levels)
+    add_toplevel_metadata(root)
     print("Finished.")
 
 
@@ -180,6 +181,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         plate_metadata["images"] = [{"path": x} for x in paths]
         root.attrs["plate"] = plate_metadata
 
+    add_toplevel_metadata(root)
     print("Finished.")
 
 
@@ -211,7 +213,6 @@ def add_group_metadata(
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
-        "_creator": f"omero-zarr {__version__}",
     }
     multiscales = [
         {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
@@ -220,6 +221,11 @@ def add_group_metadata(
     zarr_root.attrs["omero"] = image_data
 
     image._closeRE()
+
+
+def add_toplevel_metadata(zarr_root: Group) -> None:
+
+    zarr_root.attrs["_creator"] = {"name": "omero-zarr", "version": __version__}
 
 
 def channelMarshal(channel: omero.model.Channel) -> Dict[str, Any]:
