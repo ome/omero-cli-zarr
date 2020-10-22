@@ -9,7 +9,7 @@ import numpy as np
 import omero.clients  # noqa
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
-import json
+
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
@@ -162,12 +162,13 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 add_group_metadata(field_group, img, n_levels)
             print_status(int(t0), int(time.time()), count, total)
 
-    plate_metadata = {"rows": n_rows,
-                      "columns": n_cols,
-                      "row_names": list(row_names),
-                      "col_names": list(col_names),
-                      "plateAcquisitions": dict(("path", x) for x in ac_names)
-                      }
+    plate_metadata = {
+        "rows": n_rows,
+        "columns": n_cols,
+        "row_names": list(row_names),
+        "col_names": list(col_names),
+        "plateAcquisitions": {"path": x for x in ac_names},
+    }
     root.attrs["plate"] = plate_metadata
     print("Finished.")
 
