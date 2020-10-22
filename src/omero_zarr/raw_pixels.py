@@ -24,7 +24,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 
 
 def add_image(
-    image: omero.gateway.Image, parent: Group, cache_dir: Optional[str] = None
+    image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
 ) -> int:
     """ Adds the image pixel data as array to the given parent zarr group.
         Optionally caches the pixel data in the given cache_dir directory.
