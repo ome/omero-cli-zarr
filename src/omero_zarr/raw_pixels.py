@@ -11,7 +11,7 @@ from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
 
 
-def image_to_zarr(image: omero.gateway.Image, args: argparse.Namespace) -> None:
+def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
     cache_dir = target_dir if args.cache_numpy else None
 
