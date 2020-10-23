@@ -139,6 +139,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     row_names = set()
     col_names = set()
     ac_names = set()
+    paths = set()
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
@@ -154,6 +155,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
                 ac_names.add(ac_name)
+                paths.add(f"{ac_name}/{row}/{col}/{field_name}")
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
                 col_group = row_group.require_group(col)
@@ -168,6 +170,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         "row_names": list(row_names),
         "col_names": list(col_names),
         "plateAcquisitions": {"path": x for x in ac_names},
+        "images": {"path": x for x in paths},
     }
     root.attrs["plate"] = plate_metadata
     print("Finished.")
