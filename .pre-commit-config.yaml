@@ -28,6 +28,7 @@ repos:
     rev: v1.2.3
     hooks:
       - id: trailing-whitespace
+        exclude: .bumpversion.cfg
       - id: end-of-file-fixer
       - id: check-json
         files: \.(json)$

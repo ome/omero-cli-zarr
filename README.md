@@ -1,6 +1,12 @@
 OMERO CLI Zarr plugin
 =====================
 
+.. image:: https://github.com/ome/omero-cli-zarr/workflows/Build/badge.svg
+   :target: https://github.com/ome/omero-cli-zarr/actions
+
+.. image:: https://badge.fury.io/py/omero-cli-zarr.svg
+    :target: https://badge.fury.io/py/omero-cli-zarr
+
 This OMERO command-line plugin allows you to export images from
 OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md.
