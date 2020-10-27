@@ -37,7 +37,7 @@ $ omero zarr --output /home/user/zarr_files export Image:1
 
 # Cache each plane as a numpy file.npy. If connection is lost, and you need
 # to export again, we can use these instead of downloading again
-# omero zarr export Image:1 --cache_numpy
+# omero zarr --cache_numpy export Image:1
 
 ```
 
