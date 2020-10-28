@@ -211,11 +211,7 @@ def add_group_metadata(
     zarr_root.attrs["multiscales"] = multiscales
     zarr_root.attrs["omero"] = image_data
 
-    try:
-        if image._re is not None:
-            image._re.close()
-    except Exception:
-        print("Failed to close rendering engine")
+    image._closeRE()
 
 
 def channelMarshal(channel: omero.model.Channel) -> Dict[str, Any]:
