@@ -138,14 +138,25 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     row_names = set()
     col_names = set()
-    ac_names = set()
     paths = set()
+
+    col_names = plate.getColumnLabels()
+    row_names = plate.getRowLabels()
+    plate_acqs = list(plate.listPlateAcquisitions())
+    ac_names = [pa.name for pa in plate_acqs] if plate_acqs else ["0"]
+
+    plate_metadata = {
+        "rows": len(row_names),
+        "columns": len(col_names),
+        "row_names": row_names,
+        "column_names": col_names,
+        "plateAcquisitions": [{"path": x} for x in ac_names],
+    }
+    root.attrs["plate"] = plate_metadata
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
-        row_names.add(row)
-        col_names.add(col)
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
             field_name = "Field_{}".format(field + 1)
@@ -154,7 +165,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 img = ws.getImage()
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
-                ac_names.add(ac_name)
                 paths.add(f"{ac_name}/{row}/{col}/{field_name}")
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
@@ -164,15 +174,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 add_group_metadata(field_group, img, n_levels)
             print_status(int(t0), int(time.time()), count, total)
 
-    plate_metadata = {
-        "rows": n_rows,
-        "columns": n_cols,
-        "row_names": sorted(list(row_names)),
-        "column_names": sorted(list(col_names)),
-        "plateAcquisitions": [{"path": x} for x in ac_names],
-        "images": [{"path": x} for x in paths],
-    }
-    root.attrs["plate"] = plate_metadata
+        # Update images after each Well
+        plate_metadata["images"] = [{"path": x} for x in paths]
+        root.attrs["plate"] = plate_metadata
+
     print("Finished.")
 
 
