@@ -26,4 +26,6 @@ setup(
     install_requires=["omero-py>=5.6.0", "ome-zarr"],
     keywords=["OMERO.CLI", "plugin"],
     url="https://github.com/ome/omero-cli-zarr/",
+    setup_requires=["setuptools_scm"],
+    use_scm_version={"write_to": "src/omero_zarr/_version.py"},
 )
