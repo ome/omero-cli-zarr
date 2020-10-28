@@ -1,23 +1,26 @@
 ---
-name: Release
-on:
-  push:
-    tags:
-      - '*'
+name: Publish Python distributions to PyPI and TestPyPI
+on: push
 
 jobs:
-  publish-pypi:
+  build-n-publish:
     name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-      - name: Build package
+      - name: Build a binary wheel and a source tarball
         run: |
           python -mpip install wheel
           python setup.py sdist bdist_wheel
-      - name: Publish to PyPI
+      - name: Publish distribution to Test PyPI
+        uses: pypa/gh-action-pypi-publish@v1.3.0
+        with:
+          password: ${{ secrets.TEST_PYPI_PASSWORD }}
+          repository_url: https://test.pypi.org/legacy/
+      - name: Publish distribution to PyPI
+        if: startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@v1.3.0
         with:
           password: ${{ secrets.PYPI_PASSWORD }}
