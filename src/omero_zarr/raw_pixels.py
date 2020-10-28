@@ -211,6 +211,8 @@ def add_group_metadata(
     zarr_root.attrs["multiscales"] = multiscales
     zarr_root.attrs["omero"] = image_data
 
+    image._closeRE()
+
 
 def channelMarshal(channel: omero.model.Channel) -> Dict[str, Any]:
     return {
