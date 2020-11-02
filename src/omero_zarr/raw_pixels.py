@@ -149,6 +149,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     ac_names = [pa.name for pa in plate_acqs] if plate_acqs else ["0"]
 
     plate_metadata = {
+        "name": plate.name,
         "rows": len(row_names),
         "columns": len(col_names),
         "row_names": row_names,
