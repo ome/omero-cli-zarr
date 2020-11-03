@@ -198,13 +198,16 @@ def print_status(t0: int, t: int, count: int, total: int) -> None:
         count: number of tasks done
         total: total number of tasks
     """
-    percent_done = float(count) * 100 / total
-    rate = float(count) / (t - t0)
-    eta = float(total - count) / rate
-    status = "{:.2f}% done, ETA: {}".format(
-        percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
-    )
-    print(status, end="\r", flush=True)
+    try:
+        percent_done = float(count) * 100 / total
+        rate = float(count) / (t - t0)
+        eta = float(total - count) / rate
+        status = "{:.2f}% done, ETA: {}".format(
+            percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
+        )
+        print(status, end="\r", flush=True)
+    except ZeroDivisionError:
+        pass
 
 
 def add_group_metadata(
