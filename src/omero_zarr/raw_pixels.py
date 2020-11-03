@@ -161,6 +161,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
+        well_paths = []
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
             field_name = "Field_{}".format(field + 1)
@@ -170,12 +171,15 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
                 paths.add(f"{ac_name}/{row}/{col}/{field_name}")
+                well_paths.append(field_name)
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
+                # Update Well metadata after each image
+                col_group.attrs["well"] = {"images": [{"path": x} for x in well_paths]}
             print_status(int(t0), int(time.time()), count, total)
 
         # Update images after each Well
