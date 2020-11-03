@@ -142,7 +142,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     row_names = set()
     col_names = set()
-    paths = set()
+    well_paths = set()
 
     col_names = plate.getColumnLabels()
     row_names = plate.getRowLabels()
@@ -160,7 +160,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
-        well_paths = []
+        field_paths = []
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
             field_name = "%d" % field
@@ -169,8 +169,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 img = ws.getImage()
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
-                paths.add(f"{ac_name}/{row}/{col}/{field_name}")
-                well_paths.append(field_name)
+                well_paths.add(f"{ac_name}/{row}/{col}/")
+                field_paths.append(f"{field_name}/")
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
                 col_group = row_group.require_group(col)
@@ -178,12 +178,12 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": [{"path": x} for x in well_paths]}
+                col_group.attrs["well"] = {"images": [{"path": x} for x in field_paths]}
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
-        plate_metadata["images"] = [{"path": x} for x in paths]
+        plate_metadata["wells"] = [{"path": x} for x in well_paths]
         plate_metadata["field_count"] = max_fields
         root.attrs["plate"] = plate_metadata
 
