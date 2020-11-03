@@ -164,7 +164,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         well_paths = []
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
-            field_name = "Field_{}".format(field + 1)
+            field_name = "%d" % field
             count += 1
             if ws and ws.getImage():
                 img = ws.getImage()
