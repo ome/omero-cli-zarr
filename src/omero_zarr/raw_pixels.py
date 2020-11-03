@@ -137,6 +137,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     root = open_group(name, mode="w")
 
     count = 0
+    max_fields = 0
     t0 = time.time()
 
     row_names = set()
@@ -150,10 +151,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     plate_metadata = {
         "name": plate.name,
-        "rows": len(row_names),
-        "columns": len(col_names),
-        "row_names": row_names,
-        "column_names": col_names,
+        "rows": [{"name": name} for name in row_names],
+        "columns": [{"name": name} for name in col_names],
         "plateAcquisitions": [{"path": x} for x in ac_names],
     }
     root.attrs["plate"] = plate_metadata
@@ -180,10 +179,12 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 add_group_metadata(field_group, img, n_levels)
                 # Update Well metadata after each image
                 col_group.attrs["well"] = {"images": [{"path": x} for x in well_paths]}
+                max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
-        # Update images after each Well
+        # Update plate_metadata after each Well
         plate_metadata["images"] = [{"path": x} for x in paths]
+        plate_metadata["field_count"] = max_fields
         root.attrs["plate"] = plate_metadata
 
     add_toplevel_metadata(root)
