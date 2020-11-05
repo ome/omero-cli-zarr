@@ -153,7 +153,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "plateAcquisitions": [{"path": x} for x in ac_names],
+        "acquisitions": [{"path": x} for x in ac_names],
     }
     root.attrs["plate"] = plate_metadata
 
