@@ -1,7 +1,8 @@
 import argparse
+import time
 from collections import defaultdict
 from fileinput import input
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import omero.clients  # noqa
@@ -14,6 +15,8 @@ from ome_zarr.types import JSONDict
 from omero.model import MaskI
 from omero.rtypes import unwrap
 from zarr.convenience import open as zarr_open
+
+from .util import print_status
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -33,10 +36,65 @@ MASK_DTYPE_SIZE: Dict[int, np.dtype] = {
 }
 
 
-def image_masks_to_zarr(
-    image: omero.gateway.ImageWrapper, args: argparse.Namespace
+def plate_masks_to_zarr(
+    plate: omero.gateway.PlateWrapper, args: argparse.Namespace
 ) -> None:
 
+    gs = plate.getGridSize()
+    n_rows = gs["rows"]
+    n_cols = gs["columns"]
+    n_fields = plate.getNumberOfFields()
+    total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
+
+    dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
+    saver = MaskSaver(
+        plate, None, dtype, args.label_path, args.style, args.source_image
+    )
+
+    count = 0
+    t0 = time.time()
+    for well in plate.listChildren():
+        row = plate.getRowLabels()[well.row]
+        col = plate.getColumnLabels()[well.column]
+        for field in range(n_fields[0], n_fields[1] + 1):
+            ws = well.getWellSample(field)
+            field_name = "Field_{}".format(field + 1)
+            count += 1
+            if ws and ws.getImage():
+                img = ws.getImage()
+                ac = ws.getPlateAcquisition()
+                ac_name = ac.getName() if ac else "0"
+                plate_path = f"{ac_name}/{row}/{col}/{field_name}"
+                saver.set_image(img, plate_path)
+                masks = get_masks(img)
+                if masks:
+                    if args.label_map:
+                        label_map = get_label_map(masks, args.label_map)
+                        for name, values in label_map.items():
+                            print(f"Label map: {name} (count: {len(values)})")
+                            saver.save(values, name)
+                    else:
+                        saver.save(list(masks.values()), args.label_name)
+                print_status(int(t0), int(time.time()), count, total)
+
+
+def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
+    label_map = defaultdict(list)
+    roi_map = {}
+    for (roi_id, roi) in masks.items():
+        roi_map[roi_id] = roi
+
+    try:
+        for line in input(label_map_arg):
+            line = line.strip()
+            sid, name, roi = line.split(",")
+            label_map[name].append(roi_map[int(roi)])
+    except Exception as e:
+        print(f"Error parsing {label_map_arg}: {e}")
+    return label_map
+
+
+def get_masks(image: omero.gateway.ImageWrapper) -> Dict:
     conn = image._conn
     roi_service = conn.getRoiService()
     result = roi_service.findByImage(image.id, None, {"omero.group": "-1"})
@@ -54,6 +112,14 @@ def image_masks_to_zarr(
             shape_count += len(mask_shapes)
 
     print(f"Found {shape_count} mask shapes in {len(masks)} ROIs")
+    return masks
+
+
+def image_masks_to_zarr(
+    image: omero.gateway.ImageWrapper, args: argparse.Namespace
+) -> None:
+
+    masks = get_masks(image)
 
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
 
@@ -62,28 +128,16 @@ def image_masks_to_zarr(
         dtype = MASK_DTYPE_SIZE[64]
 
     if masks:
-
-        saver = MaskSaver(image, dtype, args.label_path, args.style, args.source_image)
+        saver = MaskSaver(
+            None, image, dtype, args.label_path, args.style, args.source_image
+        )
 
         if args.style == "split":
             for (roi_id, roi) in masks.items():
                 saver.save([roi], str(roi_id))
         else:
             if args.label_map:
-
-                label_map = defaultdict(list)
-                roi_map = {}
-                for (roi_id, roi) in masks.items():
-                    roi_map[roi_id] = roi
-
-                try:
-                    for line in input(args.label_map):
-                        line = line.strip()
-                        sid, name, roi = line.split(",")
-                        label_map[name].append(roi_map[int(roi)])
-                except Exception as e:
-                    print(f"Error parsing {args.label_map}: {e}")
-
+                label_map = get_label_map(masks, args.label_map)
                 for name, values in label_map.items():
                     print(f"Label map: {name} (count: {len(values)})")
                     saver.save(values, name)
@@ -101,22 +155,49 @@ class MaskSaver:
 
     def __init__(
         self,
-        image: omero.gateway.ImageWrapper,
+        plate: Optional[omero.gateway.PlateWrapper],
+        image: Optional[omero.gateway.ImageWrapper],
         dtype: np.dtype,
         path: str = "labels",
         style: str = "labeled",
         source: str = "..",
     ) -> None:
-        self.image = image
         self.dtype = dtype
         self.path = path
         self.style = style
+        self.source_image = source
+        self.plate = plate
+        self.plate_path = Optional[str]
+        if image:
+            self.image = image
+            self.size_t = image.getSizeT()
+            self.size_c = image.getSizeC()
+            self.size_z = image.getSizeZ()
+            self.size_y = image.getSizeY()
+            self.size_x = image.getSizeX()
+            self.image_shape = (
+                self.size_t,
+                self.size_c,
+                self.size_z,
+                self.size_y,
+                self.size_x,
+            )
+
+    def set_image(
+        self, image: omero.gateway.ImageWrapper, plate_path: Optional[str]
+    ) -> None:
+        """
+        Set the current image information, in case of plate
+        MaskSaver.
+        :param image: The image
+        :param plate_path: The zarr path to the image
+        :return: None
+        """
         self.size_t = image.getSizeT()
         self.size_c = image.getSizeC()
         self.size_z = image.getSizeZ()
         self.size_y = image.getSizeY()
         self.size_x = image.getSizeX()
-        self.source_image = source
         self.image_shape = (
             self.size_t,
             self.size_c,
@@ -124,8 +205,16 @@ class MaskSaver:
             self.size_y,
             self.size_x,
         )
+        if plate_path:
+            self.plate_path = plate_path
 
     def save(self, masks: List[omero.model.Shape], name: str) -> None:
+        """
+        Save the masks/labels. In case of plate, make sure to set_image first.
+        :param masks: The masks
+        :param name: The name
+        :return: None
+        """
 
         # Figure out whether we can flatten some dimensions
         unique_dims: Dict[str, Set[int]] = {
@@ -140,7 +229,10 @@ class MaskSaver:
             if unique_dims[d] == {None}:
                 ignored_dimensions.add(d)
 
-        filename = f"{self.image.id}.zarr"
+        if self.plate:
+            filename = f"{self.plate.id}.zarr"
+        else:
+            filename = f"{self.image.id}.zarr"
 
         # Verify that we are linking this mask to a real ome-zarr
         source_image = self.source_image
@@ -150,6 +242,13 @@ class MaskSaver:
             source_image = filename
             source_image_link = "../.."  # Drop "labels/0"
 
+        if self.plate:
+            assert self.plate_path, "Need image path within the plate"
+            source_image = f"{source_image}/{self.plate_path}"
+            current_path = f"{self.path}/{self.plate_path}"
+        else:
+            current_path = self.path
+
         src = parse_url(source_image)
         assert src, "Source image does not exist"
         input_pyramid = Node(src, [])
@@ -157,10 +256,11 @@ class MaskSaver:
         input_pyramid_levels = len(input_pyramid.data)
 
         root = zarr_open(filename)
-        if self.path in root.group_keys():
-            out_labels = getattr(root, self.path)
+
+        if current_path in root.group_keys():
+            out_labels = getattr(root, current_path)
         else:
-            out_labels = root.create_group(self.path)
+            out_labels = root.require_group(current_path)
 
         _mask_shape: List[int] = list(self.image_shape)
         for d in ignored_dimensions:
@@ -197,7 +297,7 @@ class MaskSaver:
         pyramid_grp.attrs["image-label"] = image_label
 
         # Register with labels metadata
-        print(f"Created {filename}/{self.path}/{name}")
+        print(f"Created {filename}/{current_path}/{name}")
         attrs = out_labels.attrs.asdict()
         # TODO: could temporarily support "masks" here as well
         if "labels" in attrs:
