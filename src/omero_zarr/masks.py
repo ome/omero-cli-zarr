@@ -245,7 +245,7 @@ class MaskSaver:
         if self.plate:
             assert self.plate_path, "Need image path within the plate"
             source_image = f"{source_image}/{self.plate_path}"
-            current_path = f"{self.path}/{self.plate_path}"
+            current_path = f"{self.plate_path}/{self.path}"
         else:
             current_path = self.path
 
