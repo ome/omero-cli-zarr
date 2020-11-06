@@ -393,7 +393,6 @@ class MaskSaver:
         fillColors: Dict[int, str] = {}
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
-            print(count)
             for mask in shapes:
                 # Unused metadata: the{ZTC}, x, y, width, height, textValue
                 if mask.fillColor:
