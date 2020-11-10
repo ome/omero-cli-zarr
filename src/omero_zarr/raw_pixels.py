@@ -141,8 +141,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     max_fields = 0
     t0 = time.time()
 
-    row_names = set()
-    col_names = set()
     well_paths = set()
 
     col_names = plate.getColumnLabels()
