@@ -137,11 +137,12 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     root = open_group(name, mode="w")
 
     count = 0
+    max_fields = 0
     t0 = time.time()
 
     row_names = set()
     col_names = set()
-    paths = set()
+    well_paths = set()
 
     col_names = plate.getColumnLabels()
     row_names = plate.getRowLabels()
@@ -150,36 +151,40 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     plate_metadata = {
         "name": plate.name,
-        "rows": len(row_names),
-        "columns": len(col_names),
-        "row_names": row_names,
-        "column_names": col_names,
-        "plateAcquisitions": [{"path": x} for x in ac_names],
+        "rows": [{"name": str(name)} for name in row_names],
+        "columns": [{"name": str(name)} for name in col_names],
+        "acquisitions": [{"path": x} for x in ac_names],
     }
     root.attrs["plate"] = plate_metadata
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
+        field_paths = []
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
-            field_name = "Field_{}".format(field + 1)
+            field_name = "%d" % field
             count += 1
             if ws and ws.getImage():
                 img = ws.getImage()
                 ac = ws.getPlateAcquisition()
                 ac_name = ac.getName() if ac else "0"
-                paths.add(f"{ac_name}/{row}/{col}/{field_name}")
+                well_paths.add(f"{ac_name}/{row}/{col}/")
+                field_paths.append(f"{field_name}/")
                 ac_group = root.require_group(ac_name)
                 row_group = ac_group.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
+                # Update Well metadata after each image
+                col_group.attrs["well"] = {"images": [{"path": x} for x in field_paths]}
+                max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
-        # Update images after each Well
-        plate_metadata["images"] = [{"path": x} for x in paths]
+        # Update plate_metadata after each Well
+        plate_metadata["wells"] = [{"path": x} for x in well_paths]
+        plate_metadata["field_count"] = max_fields
         root.attrs["plate"] = plate_metadata
 
     add_toplevel_metadata(root)
@@ -193,13 +198,16 @@ def print_status(t0: int, t: int, count: int, total: int) -> None:
         count: number of tasks done
         total: total number of tasks
     """
-    percent_done = float(count) * 100 / total
-    rate = float(count) / (t - t0)
-    eta = float(total - count) / rate
-    status = "{:.2f}% done, ETA: {}".format(
-        percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
-    )
-    print(status, end="\r", flush=True)
+    try:
+        percent_done = float(count) * 100 / total
+        rate = float(count) / (t - t0)
+        eta = float(total - count) / rate
+        status = "{:.2f}% done, ETA: {}".format(
+            percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
+        )
+        print(status, end="\r", flush=True)
+    except ZeroDivisionError:
+        pass
 
 
 def add_group_metadata(
