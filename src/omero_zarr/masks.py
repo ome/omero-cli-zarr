@@ -58,7 +58,7 @@ def plate_masks_to_zarr(
         col = plate.getColumnLabels()[well.column]
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
-            field_name = "Field_{}".format(field + 1)
+            field_name = "%d" % field
             count += 1
             if ws and ws.getImage():
                 img = ws.getImage()
@@ -249,6 +249,7 @@ class MaskSaver:
         else:
             current_path = self.path
 
+        print(f"source_image {source_image}")
         src = parse_url(source_image)
         assert src, "Source image does not exist"
         input_pyramid = Node(src, [])
