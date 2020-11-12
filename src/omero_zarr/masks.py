@@ -62,9 +62,7 @@ def plate_masks_to_zarr(
             count += 1
             if ws and ws.getImage():
                 img = ws.getImage()
-                ac = ws.getPlateAcquisition()
-                ac_name = ac.getName() if ac else "0"
-                plate_path = f"{ac_name}/{row}/{col}/{field_name}"
+                plate_path = f"{row}/{col}/{field_name}"
                 saver.set_image(img, plate_path)
                 masks = get_masks(img)
                 if masks:
