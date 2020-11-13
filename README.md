@@ -9,10 +9,13 @@ OMERO CLI Zarr plugin
 
 This OMERO command-line plugin allows you to export Images and Plates
 from OMERO as zarr files, according to the spec at
-https://github.com/ome/omero-ms-zarr/blob/master/spec.md.
+https://github.com/ome/omero-ms-zarr/blob/master/spec.md
+as well as Masks associated with Images.
 
 Images are 5D arrays of shape `(t, c, z, y, x)`.
 Plates are a hierarchy of `plate/row/column/field(image)`.
+Masks are 2D bitmasks which can exist on muliplte planes of an Image.
+In `ome-zarr` sets of Masks are collected together into "labels".
 
 It supports export using 2 alternative methods:
 
@@ -26,6 +29,8 @@ It supports export using 2 alternative methods:
 
 
 # Usage
+
+## Images and Plates
 
 To export Images or Plates via the OMERO API:
 
@@ -55,9 +60,9 @@ $ omero zarr --output /home/user/zarr_files export 1 --bf
 Image exported to /home/user/zarr_files/2chZT.lsm
 ```
 
-To export Masks for an Image or Plate:
+## Masks
 
-NB: `Masks` in OMERO are known as `labels` in `ome-zarr`.
+To export Masks for an Image or Plate:
 
 ```
 # Saved under 1.zarr/labels/0 - 1.zarr/ must already exist
