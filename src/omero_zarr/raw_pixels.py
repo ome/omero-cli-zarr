@@ -11,6 +11,7 @@ from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
 
 from . import __version__
+from .util import print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -156,8 +157,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     max_fields = 0
     t0 = time.time()
 
-    row_names = set()
-    col_names = set()
     well_paths = set()
 
     col_names = plate.getColumnLabels()
@@ -206,25 +205,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     add_toplevel_metadata(root)
     print("Finished.")
-
-
-def print_status(t0: int, t: int, count: int, total: int) -> None:
-    """ Prints percent done and ETA.
-        t0: start timestamp in seconds
-        t: current timestamp in seconds
-        count: number of tasks done
-        total: total number of tasks
-    """
-    try:
-        percent_done = float(count) * 100 / total
-        rate = float(count) / (t - t0)
-        eta = float(total - count) / rate
-        status = "{:.2f}% done, ETA: {}".format(
-            percent_done, time.strftime("%H:%M:%S", time.gmtime(eta))
-        )
-        print(status, end="\r", flush=True)
-    except ZeroDivisionError:
-        pass
 
 
 def add_group_metadata(

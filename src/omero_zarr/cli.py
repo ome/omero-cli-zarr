@@ -9,7 +9,7 @@ from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
 
-from .masks import MASK_DTYPE_SIZE, image_masks_to_zarr
+from .masks import MASK_DTYPE_SIZE, image_masks_to_zarr, plate_masks_to_zarr
 from .raw_pixels import image_to_zarr, plate_to_zarr
 
 HELP = """Export data in zarr format.
@@ -92,7 +92,7 @@ class ZarrControl(BaseControl):
         masks.add_argument(
             "--source-image",
             help=(
-                "Path to the multiscales group containing the source image. "
+                "Path to the multiscales group containing the source image/plate. "
                 "By default, use the output directory"
             ),
             default=None,
@@ -161,6 +161,9 @@ class ZarrControl(BaseControl):
             image = self._lookup(self.gateway, "Image", image_id)
             self.ctx.out("Export Masks on Image: %s" % image.name)
             image_masks_to_zarr(image, args)
+        elif isinstance(args.object, PlateI):
+            plate = self._lookup(self.gateway, "Plate", args.object.id)
+            plate_masks_to_zarr(plate, args)
 
     @gateway_required
     def export(self, args: argparse.Namespace) -> None:
