@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 
+import os
+
 from setuptools import setup
+
+
+def get_long_description():
+    here = os.path.abspath(os.path.dirname(__file__))
+    with open(os.path.join(here, "README.rst")) as f:
+        long_description = f.read()
+    return long_description
+
+
+long_description = get_long_description()
 
 setup(
     name="omero-cli-zarr",
@@ -24,6 +36,7 @@ setup(
     author_email="",
     python_requires=">=3",
     install_requires=["omero-py>=5.6.0", "ome-zarr"],
+    long_description=long_description,
     keywords=["OMERO.CLI", "plugin"],
     url="https://github.com/ome/omero-cli-zarr/",
     setup_requires=["setuptools_scm"],
