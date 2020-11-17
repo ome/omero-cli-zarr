@@ -119,6 +119,22 @@ def add_image(
     return level_count
 
 
+def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
+    """Marshal a PlateAcquisitionWrapper to JSON"""
+    acq = {
+        "id": acquisition.id,
+        "name": acquisition.name,
+        "maximumfieldcount": acquisition.maximumFieldCount,
+    }
+    if acquisition.description:
+        acq["description"] = acquisition.description
+    if acquisition.startTime:
+        acq["starttime"] = acquisition.startTime
+    if acquisition.endTime:
+        acq["endtime"] = acquisition.endTime
+    return acq
+
+
 def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
     """
        Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
@@ -146,39 +162,40 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     col_names = plate.getColumnLabels()
     row_names = plate.getRowLabels()
-    plate_acqs = list(plate.listPlateAcquisitions())
-    ac_names = [pa.name for pa in plate_acqs] if plate_acqs else ["0"]
+
+    acquisitions = [marshal_acquisition(pa) for pa in plate.listPlateAcquisitions()]
 
     plate_metadata = {
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "acquisitions": [{"path": x} for x in ac_names],
+        "acquisitions": acquisitions,
     }
     root.attrs["plate"] = plate_metadata
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
-        field_paths = []
+        fields = []
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
-            field_name = "%d" % field
-            count += 1
             if ws and ws.getImage():
-                img = ws.getImage()
                 ac = ws.getPlateAcquisition()
-                ac_name = ac.getName() if ac else "0"
-                well_paths.add(f"{ac_name}/{row}/{col}/")
-                field_paths.append(f"{field_name}/")
-                ac_group = root.require_group(ac_name)
-                row_group = ac_group.require_group(row)
+                field_name = "%d" % field
+                count += 1
+                img = ws.getImage()
+                well_paths.add(f"{row}/{col}")
+                field_info = {"path": f"{field_name}"}
+                if ac:
+                    field_info["acquisition"] = ac.id
+                fields.append(field_info)
+                row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": [{"path": x} for x in field_paths]}
+                col_group.attrs["well"] = {"images": fields}
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
