@@ -272,21 +272,28 @@ class MaskSaver:
             assert False, "6d has been removed"
 
         # Create and store binary data
-        labels, fill_colors = self.masks_to_labels(
+        labels, fill_colors, properties = self.masks_to_labels(
             masks, mask_shape, ignored_dimensions, check_overlaps=True,
         )
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)
-        pyramid_grp = out_labels.create_group(name)
+        pyramid_grp = out_labels.require_group(name)
+
         write_multiscale(label_pyramid, pyramid_grp)  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
+        label_properties: List[JSONDict] = []
         image_label = {
             "version": "0.1",
             "colors": image_label_colors,
+            "properties": label_properties,
             "source": {"image": source_image_link},
         }
+        if properties:
+            for label_value, props_dict in sorted(properties.items()):
+                new_dict: Dict = {"label-value": label_value, **props_dict}
+                label_properties.append(new_dict)
         if fill_colors:
             for label_value, rgba_int in sorted(fill_colors.items()):
                 image_label_colors.append(
@@ -356,16 +363,20 @@ class MaskSaver:
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Set[str] = None,
         check_overlaps: bool = True,
-    ) -> Tuple[np.ndarray, Dict[int, str]]:
+    ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
             into account `ignored_dimensions`
+
         :param ignored_dimensions set(char): Ignore these dimensions and set
             size to 1
+
         :param check_overlaps bool: Whether to check for overlapping masks or
             not
-        :return: Label image with size `mask_shape` as well as color metadata.
+
+        :return: Label image with size `mask_shape` as well as color metadata
+            and dict of other properties.
 
 
         TODO: Move to https://github.com/ome/omero-rois/
@@ -390,12 +401,21 @@ class MaskSaver:
             ), f"Invalid label shape: {labels.shape}, expected {mask_shape}"
 
         fillColors: Dict[int, str] = {}
+        properties: Dict[int, Dict] = {}
+
         for count, shapes in enumerate(masks):
+            mask_value = count + 1  # Prevent zeroing
             # All shapes same color for each ROI
             for mask in shapes:
                 # Unused metadata: the{ZTC}, x, y, width, height, textValue
+                properties[mask_value] = {
+                    "omero:shapeId": mask.id.val,
+                    "omero:roiId": mask.roi.id.val,
+                }
+                if mask.textValue:
+                    properties[mask_value]["text"] = unwrap(mask.textValue)
                 if mask.fillColor:
-                    fillColors[count + 1] = unwrap(mask.fillColor)
+                    fillColors[mask_value] = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
                 for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
                     for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
@@ -411,12 +431,12 @@ class MaskSaver:
                                 )
                             ):
                                 raise Exception(
-                                    f"Mask {count} overlaps with existing labels"
+                                    f"Mask {mask_value} overlaps with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous masks
                             labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
-                                binim_yx * (count + 1)  # Prevent zeroing
+                                binim_yx * mask_value
                             )
 
-        return labels, fillColors
+        return labels, fillColors, properties
