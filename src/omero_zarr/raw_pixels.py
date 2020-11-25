@@ -162,14 +162,15 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     col_names = plate.getColumnLabels()
     row_names = plate.getRowLabels()
 
-    acquisitions = [marshal_acquisition(pa) for pa in plate.listPlateAcquisitions()]
-
     plate_metadata = {
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "acquisitions": acquisitions,
     }
+    # Add acquisitions key if at least one plate acquisition exists
+    acquisitions = plate.listPlateAcquisitions()
+    if acquisitions:
+        plate_metadata["acquisitions"] = [marshal_acquisition(x) for x in acquisitions]
     root.attrs["plate"] = plate_metadata
 
     for well in plate.listChildren():
