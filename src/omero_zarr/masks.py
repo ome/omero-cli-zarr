@@ -413,7 +413,7 @@ class MaskSaver:
                     "omero:roiId": mask.roi.id.val,
                 }
                 if mask.textValue:
-                    properties[mask_value]["text"] = unwrap(mask.textValue)
+                    properties[mask_value]["omero:text"] = unwrap(mask.textValue)
                 if mask.fillColor:
                     fillColors[mask_value] = unwrap(mask.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
