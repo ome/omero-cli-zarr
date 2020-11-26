@@ -404,10 +404,11 @@ class MaskSaver:
         properties: Dict[int, Dict] = {}
 
         for count, shapes in enumerate(masks):
-            mask_value = count + 1  # Prevent zeroing
-            # All shapes same color for each ROI
             for mask in shapes:
-                # Unused metadata: the{ZTC}, x, y, width, height, textValue
+                # Using ROI ID allows stitching label from multiple images
+                # into a Plate and not creating duplicates from different iamges.
+                # All shapes will be the same value (color) for each ROI
+                mask_value = mask.roi.id.val
                 properties[mask_value] = {
                     "omero:shapeId": mask.id.val,
                     "omero:roiId": mask.roi.id.val,
