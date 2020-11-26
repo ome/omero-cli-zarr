@@ -221,6 +221,7 @@ def add_group_metadata(
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
+        "version": "0.1",
     }
     multiscales = [
         {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
