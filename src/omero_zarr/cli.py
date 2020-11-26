@@ -9,7 +9,7 @@ from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
 
-from .masks import MASK_DTYPE_SIZE, image_masks_to_zarr, plate_masks_to_zarr
+from .masks import MASK_DTYPE_SIZE, image_shapes_to_zarr, plate_shapes_to_zarr
 from .raw_pixels import image_to_zarr, plate_to_zarr
 
 HELP = """Export data in zarr format.
@@ -38,6 +38,8 @@ Options
      'split': one group per ROI
 
 """
+
+POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
 
 
 def gateway_required(func: Callable) -> Callable:
@@ -83,6 +85,56 @@ class ZarrControl(BaseControl):
 
         # Subcommands
         sub = parser.sub()
+        polygons = parser.add(sub, self.polygons, POLYGONS_HELP)
+        polygons.add_argument(
+            "object",
+            type=ProxyStringType("Image"),
+            help="The Image from which to export Polygons.",
+        )
+        polygons.add_argument(
+            "--label-bits",
+            default=str(max(MASK_DTYPE_SIZE.keys())),
+            choices=[str(s) for s in sorted(MASK_DTYPE_SIZE.keys())],
+            help=(
+                "Integer bit size for each label pixel, use 1 for a binary "
+                "label, default %(default)s"
+            ),
+        )
+        polygons.add_argument(
+            "--style",
+            choices=("split", "labeled"),
+            default="labeled",
+            help=("Choice of storage for ROIs [breaks ome-zarr]"),
+        )
+        polygons.add_argument(
+            "--label-path",
+            help=(
+                "Subdirectory of the image location for storing labels. "
+                "[breaks ome-zarr]"
+            ),
+            default="labels",
+        )
+        polygons.add_argument(
+            "--source-image",
+            help=(
+                "Path to the multiscales group containing the source image/plate. "
+                "By default, use the output directory"
+            ),
+            default=None,
+        )
+        polygons.add_argument(
+            "--label-map",
+            help=(
+                "File in format: ID,NAME,ROI_ID which is used to separate "
+                "overlapping labels"
+            ),
+        )
+        polygons.add_argument(
+            "--label-name",
+            help=("Name of the array that will be stored. Ignored for --style=split"),
+            default="0",
+        )
+
         masks = parser.add(sub, self.masks, MASKS_HELP)
         masks.add_argument(
             "object",
@@ -160,10 +212,22 @@ class ZarrControl(BaseControl):
             image_id = args.object.id
             image = self._lookup(self.gateway, "Image", image_id)
             self.ctx.out("Export Masks on Image: %s" % image.name)
-            image_masks_to_zarr(image, args)
+            image_shapes_to_zarr(image, ["Mask"], args)
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
-            plate_masks_to_zarr(plate, args)
+            plate_shapes_to_zarr(plate, ["Mask"], args)
+
+    @gateway_required
+    def polygons(self, args: argparse.Namespace) -> None:
+        """Export polygons on the Plate or Image as zarr files."""
+        if isinstance(args.object, ImageI):
+            image_id = args.object.id
+            image = self._lookup(self.gateway, "Image", image_id)
+            self.ctx.out("Export Polygons on Image: %s" % image.name)
+            image_shapes_to_zarr(image, ["Polygon"], args)
+        elif isinstance(args.object, PlateI):
+            plate = self._lookup(self.gateway, "Plate", args.object.id)
+            plate_shapes_to_zarr(plate, ["Polygon"], args)
 
     @gateway_required
     def export(self, args: argparse.Namespace) -> None:

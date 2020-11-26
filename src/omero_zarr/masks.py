@@ -1,4 +1,5 @@
 import argparse
+import re
 import time
 from collections import defaultdict
 from fileinput import input
@@ -12,8 +13,9 @@ from ome_zarr.io import parse_url
 from ome_zarr.reader import Multiscales, Node
 from ome_zarr.scale import Scaler
 from ome_zarr.types import JSONDict
-from omero.model import MaskI
+from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
+from skimage.draw import polygon as sk_polygon
 from zarr.convenience import open as zarr_open
 
 from .util import print_status
@@ -35,10 +37,19 @@ MASK_DTYPE_SIZE: Dict[int, np.dtype] = {
     64: np.int64,
 }
 
+OME_MODEL_POINT_LIST_RE = re.compile(r"([\d.]+),([\d.]+)")
 
-def plate_masks_to_zarr(
-    plate: omero.gateway.PlateWrapper, args: argparse.Namespace
+SHAPE_TYPES = {"Mask": MaskI, "Polygon": PolygonI}
+
+
+def plate_shapes_to_zarr(
+    plate: omero.gateway.PlateWrapper, shape_types: List[str], args: argparse.Namespace
 ) -> None:
+    """
+    Export shapes of type "Mask" or "Polygon" on a Plate to OME-Zarr labels
+
+    @param shape_types      e.g. ["Mask", "Polygon"]
+    """
 
     gs = plate.getGridSize()
     n_rows = gs["rows"]
@@ -64,7 +75,7 @@ def plate_masks_to_zarr(
                 img = ws.getImage()
                 plate_path = f"{row}/{col}/{field_name}"
                 saver.set_image(img, plate_path)
-                masks = get_masks(img)
+                masks = get_shapes(img, shape_types)
                 if masks:
                     if args.label_map:
                         label_map = get_label_map(masks, args.label_map)
@@ -92,7 +103,13 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
     return label_map
 
 
-def get_masks(image: omero.gateway.ImageWrapper) -> Dict:
+def get_shapes(image: omero.gateway.ImageWrapper, shape_types: List[str]) -> Dict:
+
+    shape_classes = []
+    for klass in shape_types:
+        if klass in SHAPE_TYPES:
+            shape_classes.append(SHAPE_TYPES[klass])
+
     conn = image._conn
     roi_service = conn.getRoiService()
     result = roi_service.findByImage(image.id, None, {"omero.group": "-1"})
@@ -102,7 +119,7 @@ def get_masks(image: omero.gateway.ImageWrapper) -> Dict:
     for roi in result.rois:
         mask_shapes = []
         for s in roi.copyShapes():
-            if isinstance(s, MaskI):
+            if isinstance(s, tuple(shape_classes)):
                 mask_shapes.append(s)
 
         if len(mask_shapes) > 0:
@@ -113,11 +130,16 @@ def get_masks(image: omero.gateway.ImageWrapper) -> Dict:
     return masks
 
 
-def image_masks_to_zarr(
-    image: omero.gateway.ImageWrapper, args: argparse.Namespace
+def image_shapes_to_zarr(
+    image: omero.gateway.ImageWrapper, shape_types: List[str], args: argparse.Namespace
 ) -> None:
+    """
+    Export shapes of type "Mask" or "Polygon" on an Image to OME-Zarr labels
 
-    masks = get_masks(image)
+    @param shape_types      e.g. ["Mask", "Polygon"]
+    """
+
+    masks = get_shapes(image, shape_types)
 
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
 
@@ -306,6 +328,13 @@ class MaskSaver:
             attrs["labels"] = [name]
         out_labels.attrs.update(attrs)
 
+    def shape_to_binim_yx(
+        self, shape: omero.model.Shape
+    ) -> Tuple[np.ndarray, Tuple[int, ...]]:
+        if isinstance(shape, MaskI):
+            return self._mask_to_binim_yx(shape)
+        return self._polygon_to_binim_yx(shape)
+
     def _mask_to_binim_yx(
         self, mask: omero.model.Shape
     ) -> Tuple[np.ndarray, Tuple[int, ...]]:
@@ -337,6 +366,37 @@ class MaskSaver:
         binarray = np.reshape(binarray[: (w * h)], (h, w))
 
         return binarray, (t, c, z, y, x, h, w)
+
+    def _polygon_to_binim_yx(
+        self, polygon: omero.model.Shape
+    ) -> Tuple[np.ndarray, Tuple[int, ...]]:
+
+        t = unwrap(polygon.theT)
+        c = unwrap(polygon.theC)
+        z = unwrap(polygon.theZ)
+
+        # "10,20, 50,150, 200,200, 250,75"
+        points = unwrap(polygon.points).strip()
+        coords = OME_MODEL_POINT_LIST_RE.findall(points)
+        x_coords = np.array([int(round(float(xy[0]))) for xy in coords])
+        y_coords = np.array([int(round(float(xy[1]))) for xy in coords])
+
+        # bounding box of polygon
+        x = x_coords.min()
+        y = y_coords.min()
+        w = x_coords.max() - x
+        h = y_coords.max() - y
+
+        img = np.zeros((h, w), dtype=self.dtype)
+
+        # coords *within* bounding box
+        x_coords = x_coords - x
+        y_coords = y_coords - y
+
+        pixels = sk_polygon(y_coords, x_coords, img.shape)
+        img[pixels] = 1
+
+        return img, (t, c, z, y, x, h, w)
 
     def _get_indices(
         self, ignored_dimensions: Set[str], d: str, d_value: int, d_size: int
@@ -392,11 +452,11 @@ class MaskSaver:
         fillColors: Dict[int, str] = {}
         for count, shapes in enumerate(masks):
             # All shapes same color for each ROI
-            for mask in shapes:
+            for shape in shapes:
                 # Unused metadata: the{ZTC}, x, y, width, height, textValue
-                if mask.fillColor:
-                    fillColors[count + 1] = unwrap(mask.fillColor)
-                binim_yx, (t, c, z, y, x, h, w) = self._mask_to_binim_yx(mask)
+                if shape.fillColor:
+                    fillColors[count + 1] = unwrap(shape.fillColor)
+                binim_yx, (t, c, z, y, x, h, w) = self.shape_to_binim_yx(shape)
                 for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
                     for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
                         for i_z in self._get_indices(
