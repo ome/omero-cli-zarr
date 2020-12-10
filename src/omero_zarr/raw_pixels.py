@@ -78,8 +78,6 @@ def add_image(
 
     return add_raw_image(
         planes=planes,
-        size_x=size_x,
-        size_y=size_y,
         size_z=size_z,
         size_c=size_c,
         size_t=size_t,
@@ -94,8 +92,6 @@ def add_image(
 def add_raw_image(
     *,
     planes: Iterator[np.ndarray],
-    size_x: int,
-    size_y: int,
     size_z: int,
     size_c: int,
     size_t: int,
