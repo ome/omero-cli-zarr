@@ -1,14 +1,15 @@
 import argparse
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import cv2
 import numpy
 import numpy as np
 import omero.clients  # noqa
+import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from omero.rtypes import unwrap
-from zarr.hierarchy import Group, open_group
+from zarr.hierarchy import Array, Group, open_group
 
 from . import __version__
 from .util import print_status
@@ -30,16 +31,14 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
 ) -> int:
-    """ Adds the image pixel data as array to the given parent zarr group.
+    """ Adds an OMERO image pixel data as array to the given parent zarr group.
         Optionally caches the pixel data in the given cache_dir directory.
         Returns the number of resolution levels generated for the image.
     """
-    if cache_dir is not None:
-        cache = True
-        os.makedirs(os.path.join(cache_dir, str(image.id)), mode=511, exist_ok=True)
-    else:
-        cache = False
-        cache_dir = ""
+
+    def get_cache_filename(z: int, c: int, t: int) -> str:
+        assert cache_dir is not None
+        return os.path.join(cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy")
 
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -52,11 +51,9 @@ def add_image(
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
-                if cache:
+                if cache_dir is not None:
                     # We only want to load from server if not cached locally
-                    filename = os.path.join(
-                        cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
-                    )
+                    filename = get_cache_filename(z, c, t)
                     if not os.path.exists(filename):
                         zct_list.append((z, c, t))
                 else:
@@ -65,6 +62,7 @@ def add_image(
     pixels = image.getPrimaryPixels()
 
     def planeGen() -> np.ndarray:
+
         planes = pixels.getPlanes(zct_list)
         yield from planes
 
@@ -78,26 +76,69 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    field_groups = []
+    return add_raw_image(
+        planes=planes,
+        size_z=size_z,
+        size_c=size_c,
+        size_t=size_t,
+        d_type=d_type,
+        parent=parent,
+        level_count=level_count,
+        cache_dir=cache_dir,
+        cache_file_name_func=get_cache_filename,
+    )
+
+
+def add_raw_image(
+    *,
+    planes: Iterator[np.ndarray],
+    size_z: int,
+    size_c: int,
+    size_t: int,
+    d_type: np.dtype,
+    parent: Group,
+    level_count: int,
+    cache_dir: Optional[str] = None,
+    cache_file_name_func: Callable[[int, int, int], str] = None,
+) -> int:
+    """ Adds the raw image pixel data as array to the given parent zarr group.
+        Optionally caches the pixel data in the given cache_dir directory.
+        Returns the number of resolution levels generated for the image.
+
+        planes: Generator returning planes in order of zct (whatever order
+                OMERO returns in its plane generator). Each plane must be a
+                numpy array with shape (size_y, sizex), or None to skip the
+                plane.
+    """
+
+    if cache_dir is not None:
+        cache = True
+    else:
+        cache = False
+        cache_dir = ""
+
+    field_groups: List[Array] = []
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
                 if cache:
-                    filename = os.path.join(
-                        cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy",
-                    )
+                    assert cache_file_name_func
+                    filename = cache_file_name_func(z, c, t)
                     if os.path.exists(filename):
                         plane = numpy.load(filename)
                     else:
                         plane = next(planes)
+                        os.makedirs(os.path.dirname(filename), mode=511, exist_ok=True)
                         numpy.save(filename, plane)
                 else:
                     plane = next(planes)
+                if plane is None:
+                    continue
                 for level in range(level_count):
                     size_y = plane.shape[0]
                     size_x = plane.shape[1]
                     # If on first plane, create a new group for this resolution level
-                    if t == 0 and c == 0 and z == 0:
+                    if len(field_groups) <= level:
                         field_groups.append(
                             parent.create(
                                 str(level),
@@ -210,26 +251,26 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_group_metadata(
-    zarr_root: Group, image: omero.gateway.ImageWrapper, resolutions: int = 1
+    zarr_root: Group, image: Optional[omero.gateway.ImageWrapper], resolutions: int = 1
 ) -> None:
 
-    image_data = {
-        "id": 1,
-        "channels": [channelMarshal(c) for c in image.getChannels()],
-        "rdefs": {
-            "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
-            "defaultZ": image._re.getDefaultZ(),
-            "defaultT": image._re.getDefaultT(),
-        },
-        "version": "0.1",
-    }
+    if image:
+        image_data = {
+            "id": 1,
+            "channels": [channelMarshal(c) for c in image.getChannels()],
+            "rdefs": {
+                "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
+                "defaultZ": image._re.getDefaultZ(),
+                "defaultT": image._re.getDefaultT(),
+            },
+            "version": "0.1",
+        }
+        zarr_root.attrs["omero"] = image_data
+        image._closeRE()
     multiscales = [
         {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
     ]
     zarr_root.attrs["multiscales"] = multiscales
-    zarr_root.attrs["omero"] = image_data
-
-    image._closeRE()
 
 
 def add_toplevel_metadata(zarr_root: Group) -> None:
