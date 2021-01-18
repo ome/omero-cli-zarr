@@ -1,15 +1,15 @@
 import argparse
 import os
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 
-import cv2
 import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr.scale import Scaler
 from omero.rtypes import unwrap
-from zarr.hierarchy import Array, Group, open_group
+from zarr.hierarchy import Group, open_group
 
 from . import __version__
 from .util import print_status
@@ -22,14 +22,14 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name}")
     root = open_group(name, mode="w")
-    n_levels = add_image(image, root, cache_dir=cache_dir)
+    n_levels = add_image(image, name, cache_dir=cache_dir)
     add_group_metadata(root, image, n_levels)
     add_toplevel_metadata(root)
     print("Finished.")
 
 
 def add_image(
-    image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
+    image: omero.gateway.ImageWrapper, parent: str, cache_dir: Optional[str] = None
 ) -> int:
     """ Adds an OMERO image pixel data as array to the given parent zarr group.
         Optionally caches the pixel data in the given cache_dir directory.
@@ -96,7 +96,7 @@ def add_raw_image(
     size_c: int,
     size_t: int,
     d_type: np.dtype,
-    parent: Group,
+    parent: str,
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
@@ -117,7 +117,14 @@ def add_raw_image(
         cache = False
         cache_dir = ""
 
-    field_groups: List[Array] = []
+    # Create a scaler for building our pyramid
+    scaler = Scaler(
+        output_directory=parent,
+        shape=(size_t, size_c, size_z),
+        max_layer=level_count,
+        dtype=d_type,
+    )
+
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
@@ -134,30 +141,7 @@ def add_raw_image(
                     plane = next(planes)
                 if plane is None:
                     continue
-                for level in range(level_count):
-                    size_y = plane.shape[0]
-                    size_x = plane.shape[1]
-                    # If on first plane, create a new group for this resolution level
-                    if len(field_groups) <= level:
-                        field_groups.append(
-                            parent.create(
-                                str(level),
-                                shape=(size_t, size_c, size_z, size_y, size_x),
-                                chunks=(1, 1, 1, size_y, size_x),
-                                dtype=d_type,
-                            )
-                        )
-
-                    # field_group = field_groups[level]
-                    field_groups[level][t, c, z, :, :] = plane
-
-                    if (level + 1) < level_count:
-                        # resize for next level...
-                        plane = cv2.resize(
-                            plane,
-                            dsize=(size_x // 2, size_y // 2),
-                            interpolation=cv2.INTER_NEAREST,
-                        )
+                scaler.add_plane_to_pyramid(plane, (t, c, z))
     return level_count
 
 
