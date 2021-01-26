@@ -22,10 +22,22 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name}")
     root = open_group(name, mode="w")
-    n_levels = add_image(image, name, cache_dir=cache_dir)
+    n_levels = find_resolution_count(image.getSizeX(), image.getSizeY())
+    # Add metadata first (add_image() may fail to complete)
     add_group_metadata(root, image, n_levels)
+    add_image(image, name, cache_dir=cache_dir)
     add_toplevel_metadata(root)
     print("Finished.")
+
+
+def find_resolution_count(size_x: int, size_y: int, min_size: int = 96) -> int:
+    """Get the number of resolutions needed, downsampling by factor of 2"""
+    level_count = 1
+    longest = max(size_x, size_y)
+    while longest > min_size:
+        longest = longest // 2
+        level_count += 1
+    return level_count
 
 
 def add_image(
@@ -68,13 +80,7 @@ def add_image(
 
     planes = planeGen()
 
-    # Target size for smallest multiresolution
-    TARGET_SIZE = 96
-    level_count = 1
-    longest = max(size_x, size_y)
-    while longest > TARGET_SIZE:
-        longest = longest // 2
-        level_count += 1
+    level_count = find_resolution_count(size_x, size_y)
 
     return add_raw_image(
         planes=planes,
