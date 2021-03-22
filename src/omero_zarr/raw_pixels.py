@@ -1,15 +1,15 @@
 import argparse
 import os
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 
-import cv2
 import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr.writer import write_image
 from omero.rtypes import unwrap
-from zarr.hierarchy import Array, Group, open_group
+from zarr.hierarchy import Group, open_group
 
 from . import __version__
 from .util import print_status
@@ -86,6 +86,7 @@ def add_image(
         level_count=level_count,
         cache_dir=cache_dir,
         cache_file_name_func=get_cache_filename,
+        metadata=get_omero_metadata(image),
     )
 
 
@@ -100,6 +101,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
+    metadata: Optional[Dict] = None,
 ) -> int:
     """ Adds the raw image pixel data as array to the given parent zarr group.
         Optionally caches the pixel data in the given cache_dir directory.
@@ -117,10 +119,14 @@ def add_raw_image(
         cache = False
         cache_dir = ""
 
-    field_groups: List[Array] = []
+    # Build up a 5D array, one plane at a time...
+    t_stack = []
     for t in range(size_t):
+        c_stack = []
         for c in range(size_c):
+            z_stack = []
             for z in range(size_z):
+                print("z,c,t", z, c, t)
                 if cache:
                     assert cache_file_name_func
                     filename = cache_file_name_func(z, c, t)
@@ -134,30 +140,20 @@ def add_raw_image(
                     plane = next(planes)
                 if plane is None:
                     continue
-                for level in range(level_count):
-                    size_y = plane.shape[0]
-                    size_x = plane.shape[1]
-                    # If on first plane, create a new group for this resolution level
-                    if len(field_groups) <= level:
-                        field_groups.append(
-                            parent.create(
-                                str(level),
-                                shape=(size_t, size_c, size_z, size_y, size_x),
-                                chunks=(1, 1, 1, size_y, size_x),
-                                dtype=d_type,
-                            )
-                        )
+                z_stack.append(plane)
+            c_stack.append(np.stack(z_stack, axis=0))
+        t_stack.append(np.stack(c_stack, axis=0))
+    np_image = np.stack(t_stack, axis=0)
 
-                    # field_group = field_groups[level]
-                    field_groups[level][t, c, z, :, :] = plane
+    print("np_image", np_image.shape)
+    print("metadata", metadata)
 
-                    if (level + 1) < level_count:
-                        # resize for next level...
-                        plane = cv2.resize(
-                            plane,
-                            dsize=(size_x // 2, size_y // 2),
-                            interpolation=cv2.INTER_NEAREST,
-                        )
+    size_x = np_image.shape[-1]
+    size_y = np_image.shape[-2]
+
+    write_image(
+        image=np_image, group=parent, chunks=(1, 1, 1, size_y, size_x), omero=metadata
+    )
     return level_count
 
 
@@ -250,23 +246,29 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     print("Finished.")
 
 
+def get_omero_metadata(image: omero.gateway.ImageWrapper) -> Dict[str, Any]:
+
+    image_data = {
+        "id": image.id,
+        "channels": [channelMarshal(c) for c in image.getChannels()],
+        "rdefs": {
+            "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
+            "defaultZ": image._re.getDefaultZ(),
+            "defaultT": image._re.getDefaultT(),
+        },
+        "version": "0.1",
+    }
+    image._closeRE()
+    return image_data
+
+
 def add_group_metadata(
     zarr_root: Group, image: Optional[omero.gateway.ImageWrapper], resolutions: int = 1
 ) -> None:
 
     if image:
-        image_data = {
-            "id": 1,
-            "channels": [channelMarshal(c) for c in image.getChannels()],
-            "rdefs": {
-                "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
-                "defaultZ": image._re.getDefaultZ(),
-                "defaultT": image._re.getDefaultT(),
-            },
-            "version": "0.1",
-        }
+        image_data = get_omero_metadata(image)
         zarr_root.attrs["omero"] = image_data
-        image._closeRE()
     multiscales = [
         {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
     ]
