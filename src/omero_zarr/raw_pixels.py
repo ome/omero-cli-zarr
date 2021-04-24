@@ -10,9 +10,19 @@ import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from omero.rtypes import unwrap
 from zarr.hierarchy import Array, Group, open_group
+from zarr.storage import FSStore
 
 from . import __version__
 from .util import print_status
+
+
+def _open_store(name: str) -> FSStore:
+    """
+    Create an FSStore instance that supports nested storage of chunks.
+    """
+    return FSStore(
+        name, auto_mkdir=True, key_separator="/", normalize_keys=False, mode="w",
+    )
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -20,8 +30,9 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     cache_dir = target_dir if args.cache_numpy else None
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
-    print(f"Exporting to {name}")
-    root = open_group(name, mode="w")
+    print(f"Exporting to {name} (0.2)")
+    store = _open_store(name)
+    root = open_group(store)
     n_levels = add_image(image, root, cache_dir=cache_dir)
     add_group_metadata(root, image, n_levels)
     add_toplevel_metadata(root)
@@ -191,8 +202,9 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     target_dir = args.output
     cache_dir = target_dir if args.cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
-    print(f"Exporting to {name}")
-    root = open_group(name, mode="w")
+    store = _open_store(name)
+    print(f"Exporting to {name} (0.2)")
+    root = open_group(store)
 
     count = 0
     max_fields = 0
@@ -207,7 +219,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "version": "0.1",
+        "version": "0.2",
     }
     # Add acquisitions key if at least one plate acquisition exists
     acquisitions = list(plate.listPlateAcquisitions())
@@ -237,7 +249,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 n_levels = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, n_levels)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": fields, "version": "0.1"}
+                col_group.attrs["well"] = {"images": fields, "version": "0.2"}
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
@@ -263,12 +275,12 @@ def add_group_metadata(
                 "defaultZ": image._re.getDefaultZ(),
                 "defaultT": image._re.getDefaultT(),
             },
-            "version": "0.1",
+            "version": "0.2",
         }
         zarr_root.attrs["omero"] = image_data
         image._closeRE()
     multiscales = [
-        {"version": "0.1", "datasets": [{"path": str(r)} for r in range(resolutions)]}
+        {"version": "0.2", "datasets": [{"path": str(r)} for r in range(resolutions)]}
     ]
     zarr_root.attrs["multiscales"] = multiscales
 

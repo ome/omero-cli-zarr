@@ -98,7 +98,9 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
             line = line.strip()
             sid, name, roi = line.split(",")
             label_map[name].append(roi_map[int(roi)])
-    except Exception as e:
+    except (KeyError, ValueError) as e:
+        # KeyError: if a roi is missing from the roi_map
+        # ValueError: if there aren't enough separators
         print(f"Error parsing {label_map_arg}: {e}")
     return label_map
 
@@ -307,7 +309,7 @@ class MaskSaver:
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.1",
+            "version": "0.2",
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
