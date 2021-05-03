@@ -2,11 +2,11 @@ import time
 
 
 def print_status(t0: int, t: int, count: int, total: int) -> None:
-    """ Prints percent done and ETA.
-        t0: start timestamp in seconds
-        t: current timestamp in seconds
-        count: number of tasks done
-        total: total number of tasks
+    """Prints percent done and ETA.
+    t0: start timestamp in seconds
+    t: current timestamp in seconds
+    count: number of tasks done
+    total: total number of tasks
     """
     percent_done = float(count) * 100 / total
     dt = t - t0
