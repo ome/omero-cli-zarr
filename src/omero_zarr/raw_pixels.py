@@ -21,7 +21,11 @@ def _open_store(name: str) -> FSStore:
     Create an FSStore instance that supports nested storage of chunks.
     """
     return FSStore(
-        name, auto_mkdir=True, key_separator="/", normalize_keys=False, mode="w",
+        name,
+        auto_mkdir=True,
+        key_separator="/",
+        normalize_keys=False,
+        mode="w",
     )
 
 
@@ -42,9 +46,9 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
 ) -> int:
-    """ Adds an OMERO image pixel data as array to the given parent zarr group.
-        Optionally caches the pixel data in the given cache_dir directory.
-        Returns the number of resolution levels generated for the image.
+    """Adds an OMERO image pixel data as array to the given parent zarr group.
+    Optionally caches the pixel data in the given cache_dir directory.
+    Returns the number of resolution levels generated for the image.
     """
 
     def get_cache_filename(z: int, c: int, t: int) -> str:
@@ -112,14 +116,14 @@ def add_raw_image(
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
 ) -> int:
-    """ Adds the raw image pixel data as array to the given parent zarr group.
-        Optionally caches the pixel data in the given cache_dir directory.
-        Returns the number of resolution levels generated for the image.
+    """Adds the raw image pixel data as array to the given parent zarr group.
+    Optionally caches the pixel data in the given cache_dir directory.
+    Returns the number of resolution levels generated for the image.
 
-        planes: Generator returning planes in order of zct (whatever order
-                OMERO returns in its plane generator). Each plane must be a
-                numpy array with shape (size_y, sizex), or None to skip the
-                plane.
+    planes: Generator returning planes in order of zct (whatever order
+            OMERO returns in its plane generator). Each plane must be a
+            numpy array with shape (size_y, sizex), or None to skip the
+            plane.
     """
 
     if cache_dir is not None:
@@ -190,8 +194,8 @@ def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> 
 
 def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
     """
-       Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
-       https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
+    Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
+    https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
     """
     gs = plate.getGridSize()
     n_rows = gs["rows"]

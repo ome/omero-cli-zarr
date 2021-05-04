@@ -297,7 +297,10 @@ class MaskSaver:
 
         # Create and store binary data
         labels, fill_colors, properties = self.masks_to_labels(
-            masks, mask_shape, ignored_dimensions, check_overlaps=True,
+            masks,
+            mask_shape,
+            ignored_dimensions,
+            check_overlaps=True,
         )
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)

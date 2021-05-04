@@ -44,10 +44,10 @@ POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
 
 def gateway_required(func: Callable) -> Callable:
     """
-  Decorator which initializes a client (self.client),
-  a BlitzGateway (self.gateway), and makes sure that
-  all services of the Blitzgateway are closed again.
-  """
+    Decorator which initializes a client (self.client),
+    a BlitzGateway (self.gateway), and makes sure that
+    all services of the Blitzgateway are closed again.
+    """
 
     @wraps(func)
     def _wrapper(self: Any, *args: Any, **kwargs: Any) -> Callable:
@@ -187,7 +187,9 @@ class ZarrControl(BaseControl):
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
-            "--bf", action="store_true", help="Use bioformats2raw to export the image.",
+            "--bf",
+            action="store_true",
+            help="Use bioformats2raw to export the image.",
         )
         export.add_argument(
             "--tile_width", default=None, help="For use with bioformats2raw"
@@ -202,7 +204,9 @@ class ZarrControl(BaseControl):
             "--max_workers", default=None, help="For use with bioformats2raw"
         )
         export.add_argument(
-            "object", type=ProxyStringType("Image"), help="The Image to export.",
+            "object",
+            type=ProxyStringType("Image"),
+            help="The Image to export.",
         )
 
     @gateway_required
