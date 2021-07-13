@@ -13,6 +13,7 @@ from zarr.hierarchy import Array, Group, open_group
 from zarr.storage import FSStore
 
 from . import __version__
+from . import ngff_version as VERSION
 from .util import print_status
 
 
@@ -34,7 +35,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     cache_dir = target_dir if args.cache_numpy else None
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
-    print(f"Exporting to {name} (0.2)")
+    print(f"Exporting to {name} ({VERSION})")
     store = _open_store(name)
     root = open_group(store)
     n_levels, axes = add_image(image, root, cache_dir=cache_dir)
@@ -223,7 +224,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     cache_dir = target_dir if args.cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
     store = _open_store(name)
-    print(f"Exporting to {name} (0.2)")
+    print(f"Exporting to {name} ({VERSION})")
     root = open_group(store)
 
     count = 0
@@ -239,7 +240,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "version": "0.2",
+        "version": VERSION,
     }
     # Add acquisitions key if at least one plate acquisition exists
     acquisitions = list(plate.listPlateAcquisitions())
@@ -269,7 +270,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 n_levels, axes = add_image(img, field_group, cache_dir=cache_dir)
                 add_group_metadata(field_group, img, axes, n_levels)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": fields, "version": "0.2"}
+                col_group.attrs["well"] = {"images": fields, "version": VERSION}
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
@@ -298,7 +299,7 @@ def add_group_metadata(
                 "defaultZ": image._re.getDefaultZ(),
                 "defaultT": image._re.getDefaultT(),
             },
-            "version": "0.2",
+            "version": VERSION,
         }
         zarr_root.attrs["omero"] = image_data
         image._closeRE()
