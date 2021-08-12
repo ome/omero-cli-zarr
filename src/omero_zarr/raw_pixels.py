@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy
@@ -13,6 +13,7 @@ from zarr.hierarchy import Array, Group, open_group
 from zarr.storage import FSStore
 
 from . import __version__
+from . import ngff_version as VERSION
 from .util import print_status
 
 
@@ -34,18 +35,18 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     cache_dir = target_dir if args.cache_numpy else None
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
-    print(f"Exporting to {name} (0.2)")
+    print(f"Exporting to {name} ({VERSION})")
     store = _open_store(name)
     root = open_group(store)
-    n_levels = add_image(image, root, cache_dir=cache_dir)
-    add_group_metadata(root, image, n_levels)
+    n_levels, axes = add_image(image, root, cache_dir=cache_dir)
+    add_group_metadata(root, image, axes, n_levels)
     add_toplevel_metadata(root)
     print("Finished.")
 
 
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
-) -> int:
+) -> Tuple[int, List[str]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -115,7 +116,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
-) -> int:
+) -> Tuple[int, List[str]]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -131,6 +132,15 @@ def add_raw_image(
     else:
         cache = False
         cache_dir = ""
+
+    dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
+    axes = []
+    if size_t > 1:
+        axes.append("t")
+    if size_c > 1:
+        axes.append("c")
+    if size_z > 1:
+        axes.append("z")
 
     field_groups: List[Array] = []
     for t in range(size_t):
@@ -157,14 +167,21 @@ def add_raw_image(
                         field_groups.append(
                             parent.create(
                                 str(level),
-                                shape=(size_t, size_c, size_z, size_y, size_x),
-                                chunks=(1, 1, 1, size_y, size_x),
+                                shape=tuple(dims + [size_y, size_x]),
+                                chunks=tuple([1] * len(dims) + [size_y, size_x]),
                                 dtype=d_type,
                             )
                         )
 
-                    # field_group = field_groups[level]
-                    field_groups[level][t, c, z, :, :] = plane
+                    indices = []
+                    if size_t > 1:
+                        indices.append(t)
+                    if size_c > 1:
+                        indices.append(c)
+                    if size_z > 1:
+                        indices.append(z)
+
+                    field_groups[level][tuple(indices)] = plane
 
                     if (level + 1) < level_count:
                         # resize for next level...
@@ -173,7 +190,7 @@ def add_raw_image(
                             dsize=(size_x // 2, size_y // 2),
                             interpolation=cv2.INTER_NEAREST,
                         )
-    return level_count
+    return (level_count, axes + ["y", "x"])
 
 
 def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
@@ -207,7 +224,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     cache_dir = target_dir if args.cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
     store = _open_store(name)
-    print(f"Exporting to {name} (0.2)")
+    print(f"Exporting to {name} ({VERSION})")
     root = open_group(store)
 
     count = 0
@@ -223,7 +240,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
         "name": plate.name,
         "rows": [{"name": str(name)} for name in row_names],
         "columns": [{"name": str(name)} for name in col_names],
-        "version": "0.2",
+        "version": VERSION,
     }
     # Add acquisitions key if at least one plate acquisition exists
     acquisitions = list(plate.listPlateAcquisitions())
@@ -250,10 +267,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                n_levels = add_image(img, field_group, cache_dir=cache_dir)
-                add_group_metadata(field_group, img, n_levels)
+                n_levels, axes = add_image(img, field_group, cache_dir=cache_dir)
+                add_group_metadata(field_group, img, axes, n_levels)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": fields, "version": "0.2"}
+                col_group.attrs["well"] = {"images": fields, "version": VERSION}
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
@@ -267,7 +284,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_group_metadata(
-    zarr_root: Group, image: Optional[omero.gateway.ImageWrapper], resolutions: int = 1
+    zarr_root: Group,
+    image: Optional[omero.gateway.ImageWrapper],
+    axes: List[str],
+    resolutions: int = 1,
 ) -> None:
 
     if image:
@@ -279,12 +299,16 @@ def add_group_metadata(
                 "defaultZ": image._re.getDefaultZ(),
                 "defaultT": image._re.getDefaultT(),
             },
-            "version": "0.2",
+            "version": VERSION,
         }
         zarr_root.attrs["omero"] = image_data
         image._closeRE()
     multiscales = [
-        {"version": "0.2", "datasets": [{"path": str(r)} for r in range(resolutions)]}
+        {
+            "version": "0.3",
+            "datasets": [{"path": str(r)} for r in range(resolutions)],
+            "axes": axes,
+        }
     ]
     zarr_root.attrs["multiscales"] = multiscales
 
