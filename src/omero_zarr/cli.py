@@ -293,7 +293,8 @@ class ZarrControl(BaseControl):
         stdout, stderr = process.communicate()
         if stderr:
             self.ctx.err(stderr.decode("utf-8"))
-        self.ctx.out(f"Image exported to {target.resolve()}")
+        if process.returncode == 0:
+            self.ctx.out(f"Image exported to {target.resolve()}")
 
 
 try:
