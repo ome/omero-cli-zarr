@@ -237,19 +237,8 @@ class ZarrControl(BaseControl):
     def export(self, args: argparse.Namespace) -> None:
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
-            inplace = image.getInplaceImport()
-
             if args.bf:
-                if self.client is None:
-                    raise Exception("This cannot happen")  # mypy is confused
-                prx, desc = self.client.getManagedRepository(description=True)
-                repo_path = Path(desc._path._val) / Path(desc._name._val)
-                if inplace:
-                    for p in image.getImportedImageFilePaths()["client_paths"]:
-                        self._bf_export(Path("/") / Path(p), args)
-                else:
-                    for p in image.getImportedImageFilePaths()["server_paths"]:
-                        self._bf_export(repo_path / p, args)
+                self._bf_export(image, args)
             else:
                 image_to_zarr(image, args)
         elif isinstance(args.object, PlateI):
@@ -266,7 +255,16 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(self, abs_path: Path, args: argparse.Namespace) -> None:
+    def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
+        if image.getInplaceImport():
+            p = image.getImportedImageFilePaths()["client_paths"][0]
+            abs_path = Path("/") / Path(p)
+        else:
+            if self.client is None:
+                raise Exception("This cannot happen")  # mypy is confused
+            prx, desc = self.client.getManagedRepository(description=True)
+            p = image.getImportedImageFilePaths()["server_paths"][0]
+            abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
         target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
 
         cmd: List[str] = [
@@ -283,6 +281,9 @@ class ZarrControl(BaseControl):
             cmd.append(f"--resolutions={args.resolutions}")
         if args.max_workers:
             cmd.append(f"--max_workers={args.max_workers}")
+        cmd.append(f"--series={image.series}")
+        cmd.append("--no-root-group")
+        cmd.append("--no-ome-meta-export")
 
         self.ctx.dbg(" ".join(cmd))
         process = subprocess.Popen(
@@ -294,7 +295,11 @@ class ZarrControl(BaseControl):
         if stderr:
             self.ctx.err(stderr.decode("utf-8"))
         if process.returncode == 0:
-            self.ctx.out(f"Image exported to {target.resolve()}")
+            image_source = target / "0"
+            image_dest = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
+            image_source.rename(image_dest)
+            target.rmdir()
+            self.ctx.out(f"Image exported to {image_dest.resolve()}")
 
 
 try:
