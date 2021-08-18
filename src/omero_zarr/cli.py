@@ -266,6 +266,12 @@ class ZarrControl(BaseControl):
             p = image.getImportedImageFilePaths()["server_paths"][0]
             abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
         target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
+        image_target = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
+
+        if target.exists():
+            self.ctx.die(111, f"{target.resolve()} already exists")
+        if image_target.exists():
+            self.ctx.die(111, f"{image_target.resolve()} already exists")
 
         cmd: List[str] = [
             "bioformats2raw",
@@ -296,10 +302,9 @@ class ZarrControl(BaseControl):
             self.ctx.err(stderr.decode("utf-8"))
         if process.returncode == 0:
             image_source = target / "0"
-            image_dest = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
-            image_source.rename(image_dest)
+            image_source.rename(image_target)
             target.rmdir()
-            self.ctx.out(f"Image exported to {image_dest.resolve()}")
+            self.ctx.out(f"Image exported to {image_target.resolve()}")
 
 
 try:
