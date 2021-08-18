@@ -8,9 +8,16 @@ from typing import Any, Callable, List
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
+from zarr.hierarchy import open_group
+from zarr.storage import FSStore
 
 from .masks import MASK_DTYPE_SIZE, image_shapes_to_zarr, plate_shapes_to_zarr
-from .raw_pixels import image_to_zarr, plate_to_zarr
+from .raw_pixels import (
+    add_omero_metadata,
+    add_toplevel_metadata,
+    image_to_zarr,
+    plate_to_zarr,
+)
 
 HELP = """Export data in zarr format.
 
@@ -305,6 +312,17 @@ class ZarrControl(BaseControl):
             image_source.rename(image_target)
             target.rmdir()
             self.ctx.out(f"Image exported to {image_target.resolve()}")
+
+        # Add OMERO metadata
+        store = FSStore(
+            str(image_target.resolve()),
+            auto_mkdir=False,
+            normalize_keys=False,
+            mode="w",
+        )
+        root = open_group(store)
+        add_omero_metadata(root, image)
+        add_toplevel_metadata(root)
 
 
 try:
