@@ -3,7 +3,7 @@ import subprocess
 import sys
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
@@ -268,30 +268,32 @@ class ZarrControl(BaseControl):
 
     def _bf_export(self, abs_path: Path, args: argparse.Namespace) -> None:
         target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
-        target.mkdir(exist_ok=True)
 
-        options = "--file_type=zarr"
+        cmd: List[str] = [
+            "bioformats2raw",
+            str(abs_path.resolve()),
+            str(target.resolve()),
+        ]
+
         if args.tile_width:
-            options += " --tile_width=" + args.tile_width
+            cmd.append(f"--tile_width={args.tile_width}")
         if args.tile_height:
-            options += " --tile_height=" + args.tile_height
+            cmd.append(f"--tile_height={args.tile_height}")
         if args.resolutions:
-            options += " --resolutions=" + args.resolutions
+            cmd.append(f"--resolutions={args.resolutions}")
         if args.max_workers:
-            options += " --max_workers=" + args.max_workers
+            cmd.append(f"--max_workers={args.max_workers}")
 
-        self.ctx.dbg(
-            f"bioformats2raw {options} {abs_path.resolve()} {target.resolve()}"
-        )
+        self.ctx.dbg(" ".join(cmd))
         process = subprocess.Popen(
-            ["bioformats2raw", options, abs_path.resolve(), target.resolve()],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         stdout, stderr = process.communicate()
         if stderr:
-            self.ctx.err(stderr)
-        else:
+            self.ctx.err(stderr.decode("utf-8"))
+        if process.returncode == 0:
             self.ctx.out(f"Image exported to {target.resolve()}")
 
 
