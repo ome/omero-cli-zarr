@@ -196,19 +196,29 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--bf",
             action="store_true",
-            help="Use bioformats2raw to export the image.",
+            help="Use bioformats2raw to export the image. Requires"
+            " bioformats2raw 0.3.0 or higher.",
         )
         export.add_argument(
-            "--tile_width", default=None, help="For use with bioformats2raw"
+            "--tile_width",
+            default=None,
+            help="Maximum tile width to read (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--tile_height", default=None, help="For use with bioformats2raw"
+            "--tile_height",
+            default=None,
+            help="Maximum tile height to read (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--resolutions", default=None, help="For use with bioformats2raw"
+            "--resolutions",
+            default=None,
+            help="Number of pyramid resolutions to generate"
+            " (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--max_workers", default=None, help="For use with bioformats2raw"
+            "--max_workers",
+            default=None,
+            help="Maximum number of workers (only for use with bioformats2raw)",
         )
         export.add_argument(
             "object",
