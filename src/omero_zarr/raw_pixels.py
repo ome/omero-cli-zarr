@@ -3,12 +3,12 @@ import os
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-import cv2
 import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from omero.rtypes import unwrap
+from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
 from zarr.storage import FSStore
 
@@ -185,11 +185,13 @@ def add_raw_image(
 
                     if (level + 1) < level_count:
                         # resize for next level...
-                        plane = cv2.resize(
+                        plane = resize(
                             plane,
-                            dsize=(size_x // 2, size_y // 2),
-                            interpolation=cv2.INTER_NEAREST,
-                        )
+                            output_shape=(size_x // 2, size_y // 2),
+                            order=0,
+                            preserve_range=True,
+                            anti_aliasing=False,
+                        ).astype(plane.dtype)
     return (level_count, axes + ["y", "x"])
 
 
