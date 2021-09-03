@@ -8,9 +8,16 @@ from typing import Any, Callable, List
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
+from zarr.hierarchy import open_group
+from zarr.storage import FSStore
 
 from .masks import MASK_DTYPE_SIZE, image_shapes_to_zarr, plate_shapes_to_zarr
-from .raw_pixels import image_to_zarr, plate_to_zarr
+from .raw_pixels import (
+    add_omero_metadata,
+    add_toplevel_metadata,
+    image_to_zarr,
+    plate_to_zarr,
+)
 
 HELP = """Export data in zarr format.
 
@@ -189,19 +196,29 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--bf",
             action="store_true",
-            help="Use bioformats2raw to export the image.",
+            help="Use bioformats2raw to export the image. Requires"
+            " bioformats2raw 0.3.0 or higher.",
         )
         export.add_argument(
-            "--tile_width", default=None, help="For use with bioformats2raw"
+            "--tile_width",
+            default=None,
+            help="Maximum tile width to read (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--tile_height", default=None, help="For use with bioformats2raw"
+            "--tile_height",
+            default=None,
+            help="Maximum tile height to read (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--resolutions", default=None, help="For use with bioformats2raw"
+            "--resolutions",
+            default=None,
+            help="Number of pyramid resolutions to generate"
+            " (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--max_workers", default=None, help="For use with bioformats2raw"
+            "--max_workers",
+            default=None,
+            help="Maximum number of workers (only for use with bioformats2raw)",
         )
         export.add_argument(
             "object",
@@ -237,19 +254,8 @@ class ZarrControl(BaseControl):
     def export(self, args: argparse.Namespace) -> None:
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
-            inplace = image.getInplaceImport()
-
             if args.bf:
-                if self.client is None:
-                    raise Exception("This cannot happen")  # mypy is confused
-                prx, desc = self.client.getManagedRepository(description=True)
-                repo_path = Path(desc._path._val) / Path(desc._name._val)
-                if inplace:
-                    for p in image.getImportedImageFilePaths()["client_paths"]:
-                        self._bf_export(Path("/") / Path(p), args)
-                else:
-                    for p in image.getImportedImageFilePaths()["server_paths"]:
-                        self._bf_export(repo_path / p, args)
+                self._bf_export(image, args)
             else:
                 image_to_zarr(image, args)
         elif isinstance(args.object, PlateI):
@@ -266,8 +272,23 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(self, abs_path: Path, args: argparse.Namespace) -> None:
+    def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
+        if image.getInplaceImport():
+            p = image.getImportedImageFilePaths()["client_paths"][0]
+            abs_path = Path("/") / Path(p)
+        else:
+            if self.client is None:
+                raise Exception("This cannot happen")  # mypy is confused
+            prx, desc = self.client.getManagedRepository(description=True)
+            p = image.getImportedImageFilePaths()["server_paths"][0]
+            abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
         target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
+        image_target = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
+
+        if target.exists():
+            self.ctx.die(111, f"{target.resolve()} already exists")
+        if image_target.exists():
+            self.ctx.die(111, f"{image_target.resolve()} already exists")
 
         cmd: List[str] = [
             "bioformats2raw",
@@ -283,6 +304,9 @@ class ZarrControl(BaseControl):
             cmd.append(f"--resolutions={args.resolutions}")
         if args.max_workers:
             cmd.append(f"--max_workers={args.max_workers}")
+        cmd.append(f"--series={image.series}")
+        cmd.append("--no-root-group")
+        cmd.append("--no-ome-meta-export")
 
         self.ctx.dbg(" ".join(cmd))
         process = subprocess.Popen(
@@ -294,7 +318,21 @@ class ZarrControl(BaseControl):
         if stderr:
             self.ctx.err(stderr.decode("utf-8"))
         if process.returncode == 0:
-            self.ctx.out(f"Image exported to {target.resolve()}")
+            image_source = target / "0"
+            image_source.rename(image_target)
+            target.rmdir()
+            self.ctx.out(f"Image exported to {image_target.resolve()}")
+
+        # Add OMERO metadata
+        store = FSStore(
+            str(image_target.resolve()),
+            auto_mkdir=False,
+            normalize_keys=False,
+            mode="w",
+        )
+        root = open_group(store)
+        add_omero_metadata(root, image)
+        add_toplevel_metadata(root)
 
 
 try:

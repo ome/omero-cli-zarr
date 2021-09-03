@@ -39,7 +39,8 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     store = _open_store(name)
     root = open_group(store)
     n_levels, axes = add_image(image, root, cache_dir=cache_dir)
-    add_group_metadata(root, image, axes, n_levels)
+    add_multiscales_metadata(root, axes, n_levels)
+    add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
 
@@ -268,7 +269,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
                 n_levels, axes = add_image(img, field_group, cache_dir=cache_dir)
-                add_group_metadata(field_group, img, axes, n_levels)
+                add_multiscales_metadata(field_group, axes, n_levels)
+                add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
                 col_group.attrs["well"] = {"images": fields, "version": VERSION}
                 max_fields = max(max_fields, field + 1)
@@ -283,26 +285,12 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     print("Finished.")
 
 
-def add_group_metadata(
+def add_multiscales_metadata(
     zarr_root: Group,
-    image: Optional[omero.gateway.ImageWrapper],
     axes: List[str],
     resolutions: int = 1,
 ) -> None:
 
-    if image:
-        image_data = {
-            "id": 1,
-            "channels": [channelMarshal(c) for c in image.getChannels()],
-            "rdefs": {
-                "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
-                "defaultZ": image._re.getDefaultZ(),
-                "defaultT": image._re.getDefaultT(),
-            },
-            "version": VERSION,
-        }
-        zarr_root.attrs["omero"] = image_data
-        image._closeRE()
     multiscales = [
         {
             "version": "0.3",
@@ -311,6 +299,22 @@ def add_group_metadata(
         }
     ]
     zarr_root.attrs["multiscales"] = multiscales
+
+
+def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
+
+    image_data = {
+        "id": 1,
+        "channels": [channelMarshal(c) for c in image.getChannels()],
+        "rdefs": {
+            "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
+            "defaultZ": image._re.getDefaultZ(),
+            "defaultT": image._re.getDefaultT(),
+        },
+        "version": VERSION,
+    }
+    zarr_root.attrs["omero"] = image_data
+    image._closeRE()
 
 
 def add_toplevel_metadata(zarr_root: Group) -> None:
