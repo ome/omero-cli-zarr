@@ -187,7 +187,7 @@ def add_raw_image(
                         # resize for next level...
                         plane = resize(
                             plane,
-                            output_shape=(size_x // 2, size_y // 2),
+                            output_shape=(size_y // 2, size_x // 2),
                             order=0,
                             preserve_range=True,
                             anti_aliasing=False,
