@@ -10,24 +10,10 @@ import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
-from zarr.storage import FSStore
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import print_status
-
-
-def _open_store(name: str) -> FSStore:
-    """
-    Create an FSStore instance that supports nested storage of chunks.
-    """
-    return FSStore(
-        name,
-        auto_mkdir=True,
-        key_separator="/",
-        normalize_keys=False,
-        mode="w",
-    )
+from .util import open_store, print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -36,7 +22,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
-    store = _open_store(name)
+    store = open_store(name)
     root = open_group(store)
     n_levels, axes = add_image(image, root, cache_dir=cache_dir)
     add_multiscales_metadata(root, axes, n_levels)
@@ -226,7 +212,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     target_dir = args.output
     cache_dir = target_dir if args.cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
-    store = _open_store(name)
+    store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
     root = open_group(store)
 

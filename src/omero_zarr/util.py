@@ -1,5 +1,7 @@
 import time
 
+from zarr.storage import FSStore
+
 
 def print_status(t0: int, t: int, count: int, total: int) -> None:
     """Prints percent done and ETA.
@@ -18,3 +20,16 @@ def print_status(t0: int, t: int, count: int, total: int) -> None:
         eta = "NA"
     status = f"{percent_done:.2f}% done, ETA: {eta}"
     print(status, end="\r", flush=True)
+
+
+def open_store(name: str) -> FSStore:
+    """
+    Create an FSStore instance that supports nested storage of chunks.
+    """
+    return FSStore(
+        name,
+        auto_mkdir=True,
+        key_separator="/",
+        normalize_keys=False,
+        mode="w",
+    )

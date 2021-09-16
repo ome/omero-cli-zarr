@@ -16,9 +16,9 @@ from ome_zarr.types import JSONDict
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
-from zarr.convenience import open as zarr_open
+from zarr.hierarchy import open_group
 
-from .util import print_status
+from .util import open_store, print_status
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -278,7 +278,8 @@ class MaskSaver:
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        root = zarr_open(filename)
+        store = open_store(filename)
+        root = open_group(store)
 
         if current_path in root.group_keys():
             out_labels = getattr(root, current_path)
