@@ -313,7 +313,7 @@ class MaskSaver:
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.2",
+            "version": "0.3",
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
