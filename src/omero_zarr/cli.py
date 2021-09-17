@@ -8,6 +8,7 @@ from typing import Any, Callable, List
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
+from omero_model_DatasetI import DatasetI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
@@ -16,7 +17,7 @@ from .raw_pixels import (
     add_omero_metadata,
     add_toplevel_metadata,
     image_to_zarr,
-    plate_to_zarr,
+    plate_to_zarr, dataset_to_zarr,
 )
 
 HELP = """Export data in zarr format.
@@ -218,7 +219,7 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--max_workers",
             default=None,
-            help="Maximum number of workers (only for use with bioformats2raw)",
+            help="Maximum number of workers",
         )
         export.add_argument(
             "object",
@@ -257,10 +258,13 @@ class ZarrControl(BaseControl):
             if args.bf:
                 self._bf_export(image, args)
             else:
-                image_to_zarr(image, args)
+                image_to_zarr(image, args.output, args.cache_numpy)
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+        elif isinstance(args.object, DatasetI):
+            dataset = self._lookup(self.gateway, "Dataset", args.object.id)
+            dataset_to_zarr(dataset, args)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int

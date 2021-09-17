@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import dask
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy
@@ -29,11 +30,8 @@ def _open_store(name: str) -> FSStore:
         mode="w",
     )
 
-
-def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
-    target_dir = args.output
-    cache_dir = target_dir if args.cache_numpy else None
-
+def image_to_zarr(image: omero.gateway.ImageWrapper, target_dir: str, cache_numpy: bool) -> None:
+    cache_dir = target_dir if cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
     store = _open_store(name)
@@ -42,8 +40,26 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     add_multiscales_metadata(root, axes, n_levels)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
-    print("Finished.")
+    print("{name} Finished.")
 
+def image_to_zarr_threadsafe(image_id: int, target_dir: str, cache_numpy: bool) -> None:
+    with omero.cli.cli_login() as c:
+        conn = omero.gateway.BlitzGateway(client_obj=c.get_client())
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        image = conn.getObject("Image", image_id)
+        image_to_zarr(image, target_dir, cache_numpy)
+
+def dataset_to_zarr(dataset: omero.gateway.DatasetWrapper, args: argparse.Namespace) -> None:
+    target_dir = os.path.join(args.output, "%s" % dataset.getId())
+    os.makedirs(target_dir, exist_ok=True)
+    jobs = []
+    for image in dataset.listChildren():
+        jobs.append(dask.delayed(image_to_zarr_threadsafe)(image.getId(), target_dir, args.cache_numpy))
+    if args.max_workers:
+        with dask.config.set(num_workers=int(args.max_workers)):
+            dask.delayed()(jobs).compute()
+    else:
+        dask.delayed()(jobs).compute()
 
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
