@@ -42,19 +42,28 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, target_dir: str, cache_nump
     add_toplevel_metadata(root)
     print("{name} Finished.")
 
-def image_to_zarr_threadsafe(image_id: int, target_dir: str, cache_numpy: bool) -> None:
+def image_to_zarr_threadsafe(image_id: int, root: Group, cache_dir: str) -> None:
     with omero.cli.cli_login() as c:
         conn = omero.gateway.BlitzGateway(client_obj=c.get_client())
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         image = conn.getObject("Image", image_id)
-        image_to_zarr(image, target_dir, cache_numpy)
+        print(f"Exporting Image {image_id}")
+        img_root = root.create_group(f"{image_id}")
+        n_levels, axes = add_image(image, img_root, cache_dir=cache_dir)
+        add_multiscales_metadata(img_root, axes, n_levels)
+        add_omero_metadata(img_root, image)
+        add_toplevel_metadata(img_root)
+        print(f"{image_id} Finished.")
 
 def dataset_to_zarr(dataset: omero.gateway.DatasetWrapper, args: argparse.Namespace) -> None:
-    target_dir = os.path.join(args.output, "%s" % dataset.getId())
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = os.path.join(args.output, "%s.zarr" % dataset.getId())
+    cache_dir = target_dir if args.cache_numpy else None
+    print(f"Exporting to {target_dir} ({VERSION})")
+    store = _open_store(target_dir)
+    root = open_group(store)
     jobs = []
     for image in dataset.listChildren():
-        jobs.append(dask.delayed(image_to_zarr_threadsafe)(image.getId(), target_dir, args.cache_numpy))
+        jobs.append(dask.delayed(image_to_zarr_threadsafe)(image.getId(), root, cache_dir))
     if args.max_workers:
         with dask.config.set(num_workers=int(args.max_workers)):
             dask.delayed()(jobs).compute()
