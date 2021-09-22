@@ -16,8 +16,9 @@ from .masks import MASK_DTYPE_SIZE, image_shapes_to_zarr, plate_shapes_to_zarr
 from .raw_pixels import (
     add_omero_metadata,
     add_toplevel_metadata,
+    dataset_to_zarr,
     image_to_zarr,
-    plate_to_zarr, dataset_to_zarr,
+    plate_to_zarr,
 )
 
 HELP = """Export data in zarr format.
