@@ -308,7 +308,7 @@ class MaskSaver:
         dims_to_squeeze = []
         axes = []
         for dim, size in enumerate(self.image_shape):
-            if size == 1 or dim == 1:  # always squeeze channel (dim=1)
+            if size == 1:
                 dims_to_squeeze.append(dim)
             else:
                 axes.append("tczyx"[dim])
