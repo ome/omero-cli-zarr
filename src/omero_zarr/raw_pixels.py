@@ -47,13 +47,12 @@ def image_to_zarr(
 
 
 def image_to_zarr_threadsafe(
-    client: omero.client, image_id: int, root: Group, cache_dir: str
+    client: omero.client, image_id: int, img_root: Group, cache_dir: str
 ) -> None:
     conn = omero.gateway.BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     image = conn.getObject("Image", image_id)
     print(f"Exporting Image {image_id}")
-    img_root = root.create_group(f"{image_id}")
     n_levels, axes = add_image(image, img_root, cache_dir=cache_dir)
     add_multiscales_metadata(img_root, axes, n_levels)
     add_omero_metadata(img_root, image)
@@ -72,10 +71,17 @@ def dataset_to_zarr(
     store = _open_store(target_dir)
     root = open_group(store)
     jobs = []
+    collection: Dict[str, Dict] = {}
     for image in dataset.listChildren():
+        name = image.getName()
+        # in case we get duplicate names, add _id
+        if os.path.exists(os.path.join(target_dir, name)):
+            name = f"{name}_{image.id}"
+        collection[name] = {}
+        img_root = root.create_group(name)
         jobs.append(
             dask.delayed(image_to_zarr_threadsafe)(
-                dataset._conn.c, image.getId(), root, cache_dir
+                dataset._conn.c, image.getId(), img_root, cache_dir
             )
         )
     if args.max_workers:
@@ -83,6 +89,7 @@ def dataset_to_zarr(
             dask.delayed()(jobs).compute()
     else:
         dask.delayed()(jobs).compute()
+    root.attrs["collection"] = collection
 
 
 def add_image(
