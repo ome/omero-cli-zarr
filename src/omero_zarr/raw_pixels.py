@@ -79,6 +79,8 @@ def dataset_to_zarr(
             name = f"{name}_{image.id}"
         collection[name] = {}
         img_root = root.create_group(name)
+        # Update attrs as we go, don't wait for completion
+        root.attrs["collection"] = {"images": collection}
         jobs.append(
             dask.delayed(image_to_zarr_threadsafe)(
                 dataset._conn.c, image.getId(), img_root, cache_dir
@@ -89,7 +91,6 @@ def dataset_to_zarr(
             dask.delayed()(jobs).compute()
     else:
         dask.delayed()(jobs).compute()
-    root.attrs["collection"] = collection
 
 
 def add_image(
