@@ -16,7 +16,7 @@ long_description = get_long_description()
 
 setup(
     name="omero-cli-zarr",
-    version="0.2.0",
+    version="0.2.1.dev0",
     packages=["omero_zarr", "omero.plugins"],
     package_dir={"": "src"},
     description="Plugin for exporting images in zarr format.",
@@ -35,7 +35,7 @@ setup(
     author="The Open Microscopy Team",
     author_email="",
     python_requires=">=3",
-    install_requires=["omero-py>=5.6.0", "ome-zarr>=0.2.0"],
+    install_requires=["omero-py>=5.6.0", "ome-zarr>=0.2.1.dev0"],
     long_description=long_description,
     keywords=["OMERO.CLI", "plugin"],
     url="https://github.com/ome/omero-cli-zarr/",
