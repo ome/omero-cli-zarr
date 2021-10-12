@@ -16,9 +16,9 @@ from ome_zarr.types import JSONDict
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
-from zarr.convenience import open as zarr_open
+from zarr.hierarchy import open_group
 
-from .util import print_status
+from .util import open_store, print_status
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -278,7 +278,8 @@ class MaskSaver:
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        root = zarr_open(filename)
+        store = open_store(filename)
+        root = open_group(store)
 
         if current_path in root.group_keys():
             out_labels = getattr(root, current_path)
@@ -302,17 +303,30 @@ class MaskSaver:
             ignored_dimensions,
             check_overlaps=True,
         )
+        # For v0.3 ngff we want to reduce the number of dimensions to
+        # match the dims of the Image.
+        dims_to_squeeze = []
+        axes = []
+        for dim, size in enumerate(self.image_shape):
+            if size == 1:
+                dims_to_squeeze.append(dim)
+            else:
+                axes.append("tczyx"[dim])
+        labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
+
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)
         pyramid_grp = out_labels.require_group(name)
 
-        write_multiscale(label_pyramid, pyramid_grp)  # TODO: dtype, chunks, overwite
+        write_multiscale(
+            label_pyramid, pyramid_grp, axes=axes
+        )  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.2",
+            "version": "0.3",
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
