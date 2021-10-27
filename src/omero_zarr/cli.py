@@ -226,6 +226,11 @@ class ZarrControl(BaseControl):
             help="The Image to export.",
         )
 
+        for subcommand in (polygons, masks, export):
+            subcommand.add_argument(
+                "--output", type=str, default="", help="The output directory"
+            )
+
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:
         """Export masks on the Image as zarr files."""
