@@ -33,7 +33,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
-) -> Tuple[int, List[str]]:
+) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -103,7 +103,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
-) -> Tuple[int, List[str]]:
+) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -123,11 +123,11 @@ def add_raw_image(
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
     axes = []
     if size_t > 1:
-        axes.append("t")
+        axes.append({"name": "t", "type": "time"})
     if size_c > 1:
-        axes.append("c")
+        axes.append({"name": "c", "type": "channel"})
     if size_z > 1:
-        axes.append("z")
+        axes.append({"name": "z", "type": "space"})
 
     field_groups: List[Array] = []
     for t in range(size_t):
@@ -179,7 +179,8 @@ def add_raw_image(
                             preserve_range=True,
                             anti_aliasing=False,
                         ).astype(plane.dtype)
-    return (level_count, axes + ["y", "x"])
+    axes = axes + [{"name": "y", "type": "space"}, {"name": "x", "type": "space"}]
+    return (level_count, axes)
 
 
 def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
@@ -275,7 +276,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 def add_multiscales_metadata(
     zarr_root: Group,
-    axes: List[str],
+    axes: List[Dict[str, str]],
     resolutions: int = 1,
 ) -> None:
 
