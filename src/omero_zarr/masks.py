@@ -303,7 +303,7 @@ class MaskSaver:
             ignored_dimensions,
             check_overlaps=True,
         )
-        # For v0.3 ngff we want to reduce the number of dimensions to
+        # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
         dims_to_squeeze = []
         axes = []
@@ -326,7 +326,7 @@ class MaskSaver:
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.3",
+            "version": "0.4",
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},

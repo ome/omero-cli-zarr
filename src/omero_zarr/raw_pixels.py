@@ -282,7 +282,7 @@ def add_multiscales_metadata(
 
     multiscales = [
         {
-            "version": "0.3",
+            "version": "0.4",
             "datasets": [{"path": str(r)} for r in range(resolutions)],
             "axes": axes,
         }
