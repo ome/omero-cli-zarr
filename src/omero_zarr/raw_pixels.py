@@ -113,7 +113,7 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    level_count = add_raw_image(
+    paths = add_raw_image(
         planes=planes,
         size_z=size_z,
         size_c=size_c,
@@ -125,7 +125,7 @@ def add_image(
         cache_file_name_func=get_cache_filename,
     )
 
-    add_multiscales_metadata(parent, axes, level_count)
+    add_multiscales_metadata(parent, axes, paths)
 
     return (level_count, axes)
 
@@ -141,7 +141,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
-) -> int:
+) -> List[str]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -160,6 +160,7 @@ def add_raw_image(
 
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
 
+    paths: List[str] = []
     field_groups: List[Array] = []
     for t in range(size_t):
         for c in range(size_c):
@@ -182,9 +183,11 @@ def add_raw_image(
                     size_x = plane.shape[1]
                     # If on first plane, create a new group for this resolution level
                     if len(field_groups) <= level:
+                        path = str(level)
+                        paths.append(path)
                         field_groups.append(
                             parent.create(
-                                str(level),
+                                path,
                                 shape=tuple(dims + [size_y, size_x]),
                                 chunks=tuple([1] * len(dims) + [size_y, size_x]),
                                 dtype=d_type,
@@ -211,7 +214,7 @@ def add_raw_image(
                             anti_aliasing=False,
                         ).astype(plane.dtype)
 
-    return level_count
+    return paths
 
 
 def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
@@ -307,13 +310,13 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 def add_multiscales_metadata(
     zarr_root: Group,
     axes: List[Dict[str, str]],
-    resolutions: int = 1,
+    paths: List[str],
 ) -> None:
 
     multiscales = [
         {
             "version": "0.4",
-            "datasets": [{"path": str(r)} for r in range(resolutions)],
+            "datasets": [{"path": path} for path in paths],
             "axes": axes,
         }
     ]
