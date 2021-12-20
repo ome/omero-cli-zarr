@@ -70,6 +70,21 @@ def add_image(
             "value": pix_size_z.getValue(),
         }
 
+    axes = []
+    if size_t > 1:
+        axes.append({"name": "t", "type": "time"})
+    if size_c > 1:
+        axes.append({"name": "c", "type": "channel"})
+    if size_z > 1:
+        axes.append({"name": "z", "type": "space"})
+        if pixel_sizes and "z" in pixel_sizes:
+            axes[-1]["units"] = pixel_sizes["z"]["units"]
+    # last 2 dimensions are always y and x
+    for dim in ("y", "x"):
+        axes.append({"name": dim, "type": "space"})
+        if pixel_sizes and dim in pixel_sizes:
+            axes[-1]["units"] = pixel_sizes[dim]["units"]
+
     zct_list = []
     for t in range(size_t):
         for c in range(size_c):
@@ -99,7 +114,7 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    return add_raw_image(
+    level_count = add_raw_image(
         planes=planes,
         size_z=size_z,
         size_c=size_c,
@@ -109,8 +124,9 @@ def add_image(
         level_count=level_count,
         cache_dir=cache_dir,
         cache_file_name_func=get_cache_filename,
-        pixel_sizes=pixel_sizes,
     )
+
+    return (level_count, axes)
 
 
 def add_raw_image(
@@ -124,8 +140,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
-    pixel_sizes: Dict[str, Dict[str, Any]] = None,
-) -> Tuple[int, List[Dict[str, Any]]]:
+) -> int:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -143,15 +158,6 @@ def add_raw_image(
         cache_dir = ""
 
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
-    axes = []
-    if size_t > 1:
-        axes.append({"name": "t", "type": "time"})
-    if size_c > 1:
-        axes.append({"name": "c", "type": "channel"})
-    if size_z > 1:
-        axes.append({"name": "z", "type": "space"})
-        if pixel_sizes and "z" in pixel_sizes:
-            axes[-1]["units"] = pixel_sizes["z"]["units"]
 
     field_groups: List[Array] = []
     for t in range(size_t):
@@ -204,12 +210,7 @@ def add_raw_image(
                             anti_aliasing=False,
                         ).astype(plane.dtype)
 
-    # last 2 dimensions are always y and x
-    for dim in ("y", "x"):
-        axes.append({"name": dim, "type": "space"})
-        if pixel_sizes and dim in pixel_sizes:
-            axes[-1]["units"] = pixel_sizes[dim]["units"]
-    return (level_count, axes)
+    return level_count
 
 
 def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
