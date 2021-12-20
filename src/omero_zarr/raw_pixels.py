@@ -49,6 +49,26 @@ def add_image(
     size_y = image.getSizeY()
     size_t = image.getSizeT()
     d_type = image.getPixelsType()
+    pixel_sizes = {}
+    pix_size_x = image.getPixelSizeX(units=True)
+    pix_size_y = image.getPixelSizeY(units=True)
+    pix_size_z = image.getPixelSizeZ(units=True)
+    # All OMERO units.toLowerCase() are valid UDUNITS-2 and therefore NGFF spec
+    if pix_size_x is not None:
+        pixel_sizes["x"] = {
+            "units": str(pix_size_x.getUnit()).lower(),
+            "value": pix_size_x.getValue(),
+        }
+    if pix_size_y is not None:
+        pixel_sizes["y"] = {
+            "units": str(pix_size_y.getUnit()).lower(),
+            "value": pix_size_y.getValue(),
+        }
+    if pix_size_z is not None:
+        pixel_sizes["z"] = {
+            "units": str(pix_size_z.getUnit()).lower(),
+            "value": pix_size_z.getValue(),
+        }
 
     zct_list = []
     for t in range(size_t):
@@ -89,6 +109,7 @@ def add_image(
         level_count=level_count,
         cache_dir=cache_dir,
         cache_file_name_func=get_cache_filename,
+        pixel_sizes=pixel_sizes,
     )
 
 
@@ -103,6 +124,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
+    pixel_sizes: Dict[str, Dict[str, Any]] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
@@ -128,6 +150,8 @@ def add_raw_image(
         axes.append({"name": "c", "type": "channel"})
     if size_z > 1:
         axes.append({"name": "z", "type": "space"})
+        if pixel_sizes and "z" in pixel_sizes:
+            axes[-1]["units"] = pixel_sizes["z"]["units"]
 
     field_groups: List[Array] = []
     for t in range(size_t):
@@ -179,7 +203,12 @@ def add_raw_image(
                             preserve_range=True,
                             anti_aliasing=False,
                         ).astype(plane.dtype)
-    axes = axes + [{"name": "y", "type": "space"}, {"name": "x", "type": "space"}]
+
+    # last 2 dimensions are always y and x
+    for dim in ("y", "x"):
+        axes.append({"name": dim, "type": "space"})
+        if pixel_sizes and dim in pixel_sizes:
+            axes[-1]["units"] = pixel_sizes[dim]["units"]
     return (level_count, axes)
 
 
