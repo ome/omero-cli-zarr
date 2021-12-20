@@ -24,8 +24,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    n_levels, axes = add_image(image, root, cache_dir=cache_dir)
-    add_multiscales_metadata(root, axes, n_levels)
+    add_image(image, root, cache_dir=cache_dir)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -53,7 +52,7 @@ def add_image(
     pix_size_x = image.getPixelSizeX(units=True)
     pix_size_y = image.getPixelSizeY(units=True)
     pix_size_z = image.getPixelSizeZ(units=True)
-    # All OMERO units.toLowerCase() are valid UDUNITS-2 and therefore NGFF spec
+    # All OMERO units.lower() are valid UDUNITS-2 and therefore NGFF spec
     if pix_size_x is not None:
         pixel_sizes["x"] = {
             "units": str(pix_size_x.getUnit()).lower(),
@@ -125,6 +124,8 @@ def add_image(
         cache_dir=cache_dir,
         cache_file_name_func=get_cache_filename,
     )
+
+    add_multiscales_metadata(parent, axes, level_count)
 
     return (level_count, axes)
 
@@ -287,8 +288,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                n_levels, axes = add_image(img, field_group, cache_dir=cache_dir)
-                add_multiscales_metadata(field_group, axes, n_levels)
+                add_image(img, field_group, cache_dir=cache_dir)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
                 col_group.attrs["well"] = {"images": fields, "version": VERSION}
