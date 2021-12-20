@@ -125,7 +125,26 @@ def add_image(
         cache_file_name_func=get_cache_filename,
     )
 
-    add_multiscales_metadata(parent, axes, paths)
+    # Each path needs a transformations list...
+    transformations = []
+    zooms = {"x": 1, "y": 1, "z": 1}
+    for path in paths:
+        # {"type": "scale", "scale": [2.0, 2.0, 2.0], "axisIndices": [2, 3, 4]}
+        scales = []
+        axisIndices = []
+        for index, axis in enumerate(axes):
+            if axis["name"] in pixel_sizes:
+                scales.append(zooms[axis["name"]] * pixel_sizes[axis["name"]]["value"])
+                axisIndices.append(index)
+        # ...with a single 'scale' transformation each
+        transformations.append(
+            [{"type": "scale", "scale": scales, "axisIndices": axisIndices}]
+        )
+        # NB we rescale X and Y for each level, but not Z
+        zooms["x"] = zooms["x"] * 2
+        zooms["y"] = zooms["y"] * 2
+
+    add_multiscales_metadata(parent, axes, paths, transformations)
 
     return (level_count, axes)
 
@@ -311,12 +330,18 @@ def add_multiscales_metadata(
     zarr_root: Group,
     axes: List[Dict[str, str]],
     paths: List[str],
+    transformations: List[List[Dict[str, Any]]] = None,
 ) -> None:
+    # transformations is a 2D list. For each path, we have a List of Dicts
+    datasets: List[Dict[str, Any]] = [{"path": path} for path in paths]
+    if transformations is not None:
+        for index, transform in enumerate(transformations):
+            datasets[index]["transformations"] = transform
 
     multiscales = [
         {
             "version": "0.4",
-            "datasets": [{"path": path} for path in paths],
+            "datasets": datasets,
             "axes": axes,
         }
     ]
