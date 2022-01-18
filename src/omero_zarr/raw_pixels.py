@@ -7,6 +7,7 @@ import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr.writer import write_multiscales_metadata
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
@@ -137,14 +138,17 @@ def add_image(
                 scales.append(zooms[axis["name"]] * pixel_sizes[axis["name"]]["value"])
                 axisIndices.append(index)
         # ...with a single 'scale' transformation each
-        transformations.append(
-            [{"type": "scale", "scale": scales, "axisIndices": axisIndices}]
-        )
+        if len(scales) > 0:
+            transformations.append(
+                [{"type": "scale", "scale": scales, "axisIndices": axisIndices}]
+            )
         # NB we rescale X and Y for each level, but not Z
         zooms["x"] = zooms["x"] * 2
         zooms["y"] = zooms["y"] * 2
 
-    add_multiscales_metadata(parent, axes, paths, transformations)
+    write_multiscales_metadata(
+        parent, paths, axes=axes, transformations=transformations
+    )
 
     return (level_count, axes)
 
@@ -324,28 +328,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     add_toplevel_metadata(root)
     print("Finished.")
-
-
-def add_multiscales_metadata(
-    zarr_root: Group,
-    axes: List[Dict[str, str]],
-    paths: List[str],
-    transformations: List[List[Dict[str, Any]]] = None,
-) -> None:
-    # transformations is a 2D list. For each path, we have a List of Dicts
-    datasets: List[Dict[str, Any]] = [{"path": path} for path in paths]
-    if transformations is not None:
-        for index, transform in enumerate(transformations):
-            datasets[index]["transformations"] = transform
-
-    multiscales = [
-        {
-            "version": "0.4",
-            "datasets": datasets,
-            "axes": axes,
-        }
-    ]
-    zarr_root.attrs["multiscales"] = multiscales
 
 
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
