@@ -7,7 +7,7 @@ import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
-from ome_zarr.writer import write_multiscales_metadata
+from ome_zarr.writer import write_multiscales_metadata, write_plate_metadata
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
@@ -280,20 +280,14 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     well_paths = set()
 
-    col_names = plate.getColumnLabels()
-    row_names = plate.getRowLabels()
+    col_names = [str(name) for name in plate.getColumnLabels()]
+    row_names = [str(name) for name in plate.getRowLabels()]
 
-    plate_metadata = {
-        "name": plate.name,
-        "rows": [{"name": str(name)} for name in row_names],
-        "columns": [{"name": str(name)} for name in col_names],
-        "version": VERSION,
-    }
     # Add acquisitions key if at least one plate acquisition exists
     acquisitions = list(plate.listPlateAcquisitions())
+    plate_acq = None
     if acquisitions:
-        plate_metadata["acquisitions"] = [marshal_acquisition(x) for x in acquisitions]
-    root.attrs["plate"] = plate_metadata
+        plate_acq = [marshal_acquisition(x) for x in acquisitions]
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
@@ -322,9 +316,15 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
-        plate_metadata["wells"] = [{"path": x} for x in well_paths]
-        plate_metadata["field_count"] = max_fields
-        root.attrs["plate"] = plate_metadata
+        write_plate_metadata(
+            root,
+            row_names,
+            col_names,
+            wells=list(well_paths),
+            field_count=max_fields,
+            acquisitions=plate_acq,
+            name=plate.name,
+        )
 
     add_toplevel_metadata(root)
     print("Finished.")
