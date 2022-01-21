@@ -16,9 +16,9 @@ from . import ngff_version as VERSION
 from .util import open_store, print_status
 
 
-def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
-    target_dir = args.output
-    cache_dir = target_dir if args.cache_numpy else None
+def image_to_zarr(
+    image: omero.gateway.ImageWrapper, target_dir: str, cache_dir: str = None
+) -> None:
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")

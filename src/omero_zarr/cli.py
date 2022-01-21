@@ -262,7 +262,9 @@ class ZarrControl(BaseControl):
             if args.bf:
                 self._bf_export(image, args)
             else:
-                image_to_zarr(image, args)
+                target_dir = args.output
+                cache_dir = target_dir if args.cache_numpy else None
+                image_to_zarr(image, target_dir, cache_dir)
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
