@@ -7,7 +7,11 @@ import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
-from ome_zarr.writer import write_multiscales_metadata, write_plate_metadata
+from ome_zarr.writer import (
+    write_multiscales_metadata,
+    write_plate_metadata,
+    write_well_metadata,
+)
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
@@ -256,7 +260,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 add_image(img, field_group, cache_dir=cache_dir)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": fields, "version": VERSION}
+                write_well_metadata(col_group, fields)
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
