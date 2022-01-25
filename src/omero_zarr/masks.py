@@ -19,7 +19,7 @@ from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
 from . import ngff_version as VERSION
-from .util import marshal_axes, open_store, print_status
+from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -306,7 +306,8 @@ class MaskSaver:
             check_overlaps=True,
         )
 
-        metadata = marshal_axes(self.image, levels=1)
+        axes = marshal_axes(self.image)
+        transformations = marshal_transformations(self.image, levels=1)
 
         # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
@@ -321,7 +322,7 @@ class MaskSaver:
         pyramid_grp = out_labels.require_group(name)
 
         write_multiscale(
-            label_pyramid, pyramid_grp, **metadata
+            label_pyramid, pyramid_grp, axes=axes, transformations=transformations
         )  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata
