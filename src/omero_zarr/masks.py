@@ -18,6 +18,7 @@ from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
+from . import ngff_version as VERSION
 from .util import marshal_axes, open_store, print_status
 
 # Mapping of dimension names to axes in the Zarr
@@ -327,7 +328,7 @@ class MaskSaver:
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.4",
+            "version": VERSION,
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
