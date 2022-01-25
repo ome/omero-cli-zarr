@@ -18,7 +18,7 @@ from zarr.hierarchy import Array, Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import marshal_axes, open_store, print_status
+from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -95,11 +95,14 @@ def add_image(
         cache_file_name_func=get_cache_filename,
     )
 
-    metadata = marshal_axes(image, len(paths))
+    axes = marshal_axes(image)
+    transformations = marshal_transformations(image, len(paths))
 
-    write_multiscales_metadata(parent, paths, **metadata)
+    write_multiscales_metadata(
+        parent, paths, axes=axes, transformations=transformations
+    )
 
-    return (level_count, metadata["axes"])
+    return (level_count, axes)
 
 
 def add_raw_image(

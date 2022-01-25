@@ -37,14 +37,9 @@ def open_store(name: str) -> FSStore:
     )
 
 
-def marshal_axes(
-    image: ImageWrapper, levels: int = 1, multiscales_zoom: float = 2.0
-) -> Dict[str, List]:
-    # Prepare axes and transformations info...
-    size_c = image.getSizeC()
-    size_z = image.getSizeZ()
-    size_t = image.getSizeT()
-    pixel_sizes = {}
+def marshal_pixel_sizes(image: ImageWrapper) -> Dict[str, Dict]:
+
+    pixel_sizes: Dict[str, Dict] = {}
     pix_size_x = image.getPixelSizeX(units=True)
     pix_size_y = image.getPixelSizeY(units=True)
     pix_size_z = image.getPixelSizeZ(units=True)
@@ -64,6 +59,15 @@ def marshal_axes(
             "units": str(pix_size_z.getUnit()).lower(),
             "value": pix_size_z.getValue(),
         }
+    return pixel_sizes
+
+
+def marshal_axes(image: ImageWrapper) -> List[Dict]:
+    # Prepare axes and transformations info...
+    size_c = image.getSizeC()
+    size_z = image.getSizeZ()
+    size_t = image.getSizeT()
+    pixel_sizes = marshal_pixel_sizes(image)
 
     axes = []
     if size_t > 1:
@@ -79,6 +83,16 @@ def marshal_axes(
         axes.append({"name": dim, "type": "space"})
         if pixel_sizes and dim in pixel_sizes:
             axes[-1]["units"] = pixel_sizes[dim]["units"]
+
+    return axes
+
+
+def marshal_transformations(
+    image: ImageWrapper, levels: int = 1, multiscales_zoom: float = 2.0
+) -> List[List[Dict]]:
+
+    axes = marshal_axes(image)
+    pixel_sizes = marshal_pixel_sizes(image)
 
     # Each path needs a transformations list...
     transformations = []
@@ -100,4 +114,4 @@ def marshal_axes(
         zooms["x"] = zooms["x"] * multiscales_zoom
         zooms["y"] = zooms["y"] * multiscales_zoom
 
-    return {"axes": axes, "transformations": transformations}
+    return transformations
