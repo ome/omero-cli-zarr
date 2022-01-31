@@ -16,7 +16,7 @@ long_description = get_long_description()
 
 setup(
     name="omero-cli-zarr",
-    version="0.2.2.dev0",
+    version="0.3a1",
     packages=["omero_zarr", "omero.plugins"],
     package_dir={"": "src"},
     description="Plugin for exporting images in zarr format.",
