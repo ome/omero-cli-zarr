@@ -100,7 +100,7 @@ def add_image(
 
     datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
     for dataset, transform in zip(datasets, transformations):
-        dataset["transformations"] = transform
+        dataset["coordinateTransformations"] = transform
 
     write_multiscales_metadata(parent, datasets, axes=axes)
 
