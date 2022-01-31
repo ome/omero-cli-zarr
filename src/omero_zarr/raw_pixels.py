@@ -7,13 +7,18 @@ import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr.writer import (
+    write_multiscales_metadata,
+    write_plate_metadata,
+    write_well_metadata,
+)
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import open_store, print_status
+from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -24,8 +29,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    n_levels, axes = add_image(image, root, cache_dir=cache_dir)
-    add_multiscales_metadata(root, axes, n_levels)
+    add_image(image, root, cache_dir=cache_dir)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -33,7 +37,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 
 def add_image(
     image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
-) -> Tuple[int, List[str]]:
+) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -79,7 +83,7 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    return add_raw_image(
+    paths = add_raw_image(
         planes=planes,
         size_z=size_z,
         size_c=size_c,
@@ -90,6 +94,15 @@ def add_image(
         cache_dir=cache_dir,
         cache_file_name_func=get_cache_filename,
     )
+
+    axes = marshal_axes(image)
+    transformations = marshal_transformations(image, len(paths))
+
+    write_multiscales_metadata(
+        parent, paths, axes=axes, transformations=transformations
+    )
+
+    return (level_count, axes)
 
 
 def add_raw_image(
@@ -103,7 +116,7 @@ def add_raw_image(
     level_count: int,
     cache_dir: Optional[str] = None,
     cache_file_name_func: Callable[[int, int, int], str] = None,
-) -> Tuple[int, List[str]]:
+) -> List[str]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
@@ -121,14 +134,8 @@ def add_raw_image(
         cache_dir = ""
 
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
-    axes = []
-    if size_t > 1:
-        axes.append("t")
-    if size_c > 1:
-        axes.append("c")
-    if size_z > 1:
-        axes.append("z")
 
+    paths: List[str] = []
     field_groups: List[Array] = []
     for t in range(size_t):
         for c in range(size_c):
@@ -151,9 +158,11 @@ def add_raw_image(
                     size_x = plane.shape[1]
                     # If on first plane, create a new group for this resolution level
                     if len(field_groups) <= level:
+                        path = str(level)
+                        paths.append(path)
                         field_groups.append(
                             parent.create(
-                                str(level),
+                                path,
                                 shape=tuple(dims + [size_y, size_x]),
                                 chunks=tuple([1] * len(dims) + [size_y, size_x]),
                                 dtype=d_type,
@@ -179,7 +188,8 @@ def add_raw_image(
                             preserve_range=True,
                             anti_aliasing=False,
                         ).astype(plane.dtype)
-    return (level_count, axes + ["y", "x"])
+
+    return paths
 
 
 def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> Dict:
@@ -222,20 +232,14 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     well_paths = set()
 
-    col_names = plate.getColumnLabels()
-    row_names = plate.getRowLabels()
+    col_names = [str(name) for name in plate.getColumnLabels()]
+    row_names = [str(name) for name in plate.getRowLabels()]
 
-    plate_metadata = {
-        "name": plate.name,
-        "rows": [{"name": str(name)} for name in row_names],
-        "columns": [{"name": str(name)} for name in col_names],
-        "version": VERSION,
-    }
     # Add acquisitions key if at least one plate acquisition exists
     acquisitions = list(plate.listPlateAcquisitions())
+    plate_acq = None
     if acquisitions:
-        plate_metadata["acquisitions"] = [marshal_acquisition(x) for x in acquisitions]
-    root.attrs["plate"] = plate_metadata
+        plate_acq = [marshal_acquisition(x) for x in acquisitions]
 
     for well in plate.listChildren():
         row = plate.getRowLabels()[well.row]
@@ -256,37 +260,26 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                n_levels, axes = add_image(img, field_group, cache_dir=cache_dir)
-                add_multiscales_metadata(field_group, axes, n_levels)
+                add_image(img, field_group, cache_dir=cache_dir)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
-                col_group.attrs["well"] = {"images": fields, "version": VERSION}
+                write_well_metadata(col_group, fields)
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
-        plate_metadata["wells"] = [{"path": x} for x in well_paths]
-        plate_metadata["field_count"] = max_fields
-        root.attrs["plate"] = plate_metadata
+        write_plate_metadata(
+            root,
+            row_names,
+            col_names,
+            wells=list(well_paths),
+            field_count=max_fields,
+            acquisitions=plate_acq,
+            name=plate.name,
+        )
 
     add_toplevel_metadata(root)
     print("Finished.")
-
-
-def add_multiscales_metadata(
-    zarr_root: Group,
-    axes: List[str],
-    resolutions: int = 1,
-) -> None:
-
-    multiscales = [
-        {
-            "version": "0.3",
-            "datasets": [{"path": str(r)} for r in range(resolutions)],
-            "axes": axes,
-        }
-    ]
-    zarr_root.attrs["multiscales"] = multiscales
 
 
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:

@@ -18,7 +18,8 @@ from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from .util import open_store, print_status
+from . import ngff_version as VERSION
+from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -215,6 +216,7 @@ class MaskSaver:
         :param plate_path: The zarr path to the image
         :return: None
         """
+        self.image = image
         self.size_t = image.getSizeT()
         self.size_c = image.getSizeC()
         self.size_z = image.getSizeZ()
@@ -303,15 +305,16 @@ class MaskSaver:
             ignored_dimensions,
             check_overlaps=True,
         )
-        # For v0.3 ngff we want to reduce the number of dimensions to
+
+        axes = marshal_axes(self.image)
+        transformations = marshal_transformations(self.image, levels=1)
+
+        # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
         dims_to_squeeze = []
-        axes = []
         for dim, size in enumerate(self.image_shape):
             if size == 1:
                 dims_to_squeeze.append(dim)
-            else:
-                axes.append("tczyx"[dim])
         labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
 
         scaler = Scaler(max_layer=input_pyramid_levels)
@@ -319,14 +322,14 @@ class MaskSaver:
         pyramid_grp = out_labels.require_group(name)
 
         write_multiscale(
-            label_pyramid, pyramid_grp, axes=axes
+            label_pyramid, pyramid_grp, axes=axes, transformations=transformations
         )  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": "0.3",
+            "version": VERSION,
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
