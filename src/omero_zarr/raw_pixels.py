@@ -98,9 +98,11 @@ def add_image(
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
 
-    write_multiscales_metadata(
-        parent, paths, axes=axes, transformations=transformations
-    )
+    datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
+    for dataset, transform in zip(datasets, transformations):
+        dataset["coordinateTransformations"] = transform
+
+    write_multiscales_metadata(parent, datasets, axes=axes)
 
     return (level_count, axes)
 

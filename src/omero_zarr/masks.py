@@ -307,7 +307,6 @@ class MaskSaver:
         )
 
         axes = marshal_axes(self.image)
-        transformations = marshal_transformations(self.image, levels=1)
 
         # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
@@ -320,9 +319,13 @@ class MaskSaver:
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)
         pyramid_grp = out_labels.require_group(name)
+        transformations = marshal_transformations(self.image, levels=len(label_pyramid))
 
         write_multiscale(
-            label_pyramid, pyramid_grp, axes=axes, transformations=transformations
+            label_pyramid,
+            pyramid_grp,
+            axes=axes,
+            coordinate_transformations=transformations,
         )  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata

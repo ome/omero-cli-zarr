@@ -96,21 +96,18 @@ def marshal_transformations(
 
     # Each path needs a transformations list...
     transformations = []
-    zooms = {"x": 1.0, "y": 1.0, "z": 1.0}
+    zooms = {"x": 1.0, "y": 1.0, "z": 1.0, "c": 1.0, "t": 1.0}
     for level in range(levels):
-        # {"type": "scale", "scale": [2.0, 2.0, 2.0], "axisIndices": [2, 3, 4]}
+        # {"type": "scale", "scale": [1, 1, 0.3, 0.5, 0.5]
         scales = []
-        axisIndices = []
         for index, axis in enumerate(axes):
+            pixel_size = 1
             if axis["name"] in pixel_sizes:
-                scales.append(zooms[axis["name"]] * pixel_sizes[axis["name"]]["value"])
-                axisIndices.append(index)
+                pixel_size = pixel_sizes[axis["name"]].get("value", 1)
+            scales.append(zooms[axis["name"]] * pixel_size)
         # ...with a single 'scale' transformation each
-        if len(scales) > 0:
-            transformations.append(
-                [{"type": "scale", "scale": scales, "axisIndices": axisIndices}]
-            )
-        # NB we rescale X and Y for each level, but not Z
+        transformations.append([{"type": "scale", "scale": scales}])
+        # NB we rescale X and Y for each level, but not Z, C, T
         zooms["x"] = zooms["x"] * multiscales_zoom
         zooms["y"] = zooms["y"] * multiscales_zoom
 
