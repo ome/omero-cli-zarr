@@ -265,12 +265,9 @@ class MaskSaver:
             source_image = filename
             source_image_link = "../.."  # Drop "labels/0"
 
-        # if self.plate:
-        #     assert self.plate_path, "Need image path within the plate"
-        #     source_image = f"{source_image}/{self.plate_path}"
-        #     current_path = f"{self.plate_path}/{self.path}"
-        # else:
-        #     current_path = self.path
+        if self.plate:
+            assert self.plate_path, "Need image path within the plate"
+            source_image = f"{source_image}/{self.plate_path}"
 
         print(f"source_image {source_image}")
         src = parse_url(source_image)
@@ -282,10 +279,10 @@ class MaskSaver:
         store = open_store(filename)
         root = open_group(store)
 
-        # if current_path in root.group_keys():
-        #     out_labels = getattr(root, current_path)
-        # else:
-        #     out_labels = root.require_group(current_path)
+        if self.plate:
+            label_group = root.require_group(self.plate_path)
+        else:
+            label_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
         for d in ignored_dimensions:
@@ -320,13 +317,6 @@ class MaskSaver:
         # pyramid_grp = out_labels.require_group(name)
         transformations = marshal_transformations(self.image, levels=len(label_pyramid))
 
-        # write_multiscale(
-        #     label_pyramid,
-        #     pyramid_grp,
-        #     axes=axes,
-        #     coordinate_transformations=transformations,
-        # )  # TODO: dtype, chunks, overwite
-
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
@@ -344,24 +334,10 @@ class MaskSaver:
                 image_label_colors.append(
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
-        # TODO: move to write method
-        # pyramid_grp.attrs["image-label"] = image_label
-
-        # Register with labels metadata
-        # print(f"Created {filename}/{current_path}/{name}")
-        # attrs = out_labels.attrs.asdict()
-        # TODO: could temporarily support "masks" here as well
-
-        # if "labels" in attrs:
-        #     if name not in attrs["labels"]:
-        #         attrs["labels"].append(name)
-        # else:
-        #     attrs["labels"] = [name]
-        # out_labels.attrs.update(attrs)
 
         write_multiscale_labels(
             label_pyramid,
-            root,
+            label_group,
             name,
             axes=axes,
             coordinate_transformations=transformations,
