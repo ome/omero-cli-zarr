@@ -200,6 +200,10 @@ class ZarrControl(BaseControl):
             " bioformats2raw 0.3.0 or higher.",
         )
         export.add_argument(
+            "--bfpath",
+            help="Like --bf, but pass an explicit path to the file",
+        )
+        export.add_argument(
             "--tile_width",
             default=None,
             help="Maximum tile width to read (only for use with bioformats2raw)",
@@ -259,7 +263,8 @@ class ZarrControl(BaseControl):
     def export(self, args: argparse.Namespace) -> None:
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
-            if args.bf:
+            print(dir(args))
+            if args.bf or args.bfpath:
                 self._bf_export(image, args)
             else:
                 image_to_zarr(image, args)
@@ -278,7 +283,9 @@ class ZarrControl(BaseControl):
         return obj
 
     def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
-        if image.getInplaceImport():
+        if args.bfpath:
+            abs_path = Path(args.bfpath)
+        elif image.getInplaceImport():
             p = image.getImportedImageFilePaths()["client_paths"][0]
             abs_path = Path("/") / Path(p)
         else:
@@ -287,18 +294,18 @@ class ZarrControl(BaseControl):
             prx, desc = self.client.getManagedRepository(description=True)
             p = image.getImportedImageFilePaths()["server_paths"][0]
             abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
-        target = (Path(args.output) or Path.cwd()) / Path(abs_path).name
+        temp_target = (Path(args.output) or Path.cwd()) / f"{image.id}.out"
         image_target = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
 
-        if target.exists():
-            self.ctx.die(111, f"{target.resolve()} already exists")
+        if temp_target.exists():
+            self.ctx.die(111, f"{temp_target.resolve()} already exists")
         if image_target.exists():
             self.ctx.die(111, f"{image_target.resolve()} already exists")
 
         cmd: List[str] = [
             "bioformats2raw",
             str(abs_path.resolve()),
-            str(target.resolve()),
+            str(temp_target.resolve()),
         ]
 
         if args.tile_width:
@@ -323,9 +330,9 @@ class ZarrControl(BaseControl):
         if stderr:
             self.ctx.err(stderr.decode("utf-8"))
         if process.returncode == 0:
-            image_source = target / "0"
+            image_source = temp_target / "0"
             image_source.rename(image_target)
-            target.rmdir()
+            temp_target.rmdir()
             self.ctx.out(f"Image exported to {image_target.resolve()}")
 
         # Add OMERO metadata
