@@ -263,7 +263,6 @@ class ZarrControl(BaseControl):
     def export(self, args: argparse.Namespace) -> None:
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
-            print(dir(args))
             if args.bf or args.bfpath:
                 self._bf_export(image, args)
             else:
