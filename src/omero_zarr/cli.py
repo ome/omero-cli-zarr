@@ -30,8 +30,45 @@ Subcommands
 """
 EXPORT_HELP = """Export an image in zarr format.
 
+Using bioformats2raw
+--------------------
+
+Rather than download pixels from OMERO using the API, two options allow
+converting files directly using bioformats2raw:
+
+  --bf
+
+     Server-side option which queries the server for the location
+     of the file within the managed repository (e.g. /OMERO/ManagedRepository)
+     and then calls bioformats2raw directly on that file.
+
+  --bfpath=local/file/path
+
+     If a copy of the fileset is available locally, then this option
+     calls bioformats2raw directly on the argument. No checks are performed
+     that the fileset is the correct one.
+
+bioformats2raw executable
+-------------------------
+
 In order to use bioformats2raw for the actual export,
 make sure the bioformats2raw binary is in the $PATH.
+
+bioformats2raw options
+----------------------
+
+  --max_workers
+
+     Maximum number of workers to use for parallel generation of pyramids
+
+  --tile_width / --tile_height
+
+     Maximum tile width or height to read (only for use with bioformats2raw)
+
+  --resolutions
+
+     Number of pyramid resolutions to generate
+
 """
 
 MASKS_HELP = """Export ROI Masks on the Image in zarr format.
@@ -196,12 +233,13 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--bf",
             action="store_true",
-            help="Use bioformats2raw to export the image. Requires"
-            " bioformats2raw 0.3.0 or higher.",
+            help="Use bioformats2raw on the server to export images. Requires"
+            " bioformats2raw 0.3.0 or higher and access to the managed repo.",
         )
         export.add_argument(
             "--bfpath",
-            help="Like --bf, but pass an explicit path to the file",
+            help="Use bioformats2raw on a local copy of a file. Requires"
+            " bioformats2raw 0.4.0 or higher.",
         )
         export.add_argument(
             "--tile_width",
