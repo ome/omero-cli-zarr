@@ -331,7 +331,7 @@ class ZarrControl(BaseControl):
             prx, desc = self.client.getManagedRepository(description=True)
             p = image.getImportedImageFilePaths()["server_paths"][0]
             abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
-        temp_target = (Path(args.output) or Path.cwd()) / f"{image.id}.out"
+        temp_target = (Path(args.output) or Path.cwd()) / f"{image.id}.tmp"
         image_target = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
 
         if temp_target.exists():
