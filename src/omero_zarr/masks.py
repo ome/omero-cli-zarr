@@ -1,4 +1,5 @@
 import argparse
+import logging
 import re
 import time
 from collections import defaultdict
@@ -20,6 +21,8 @@ from zarr.hierarchy import open_group
 
 from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
+
+LOGGER = logging.getLogger("omero_zarr.masks")
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -524,5 +527,14 @@ class MaskSaver:
                             labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
                                 binim_yx * shape_value
                             )
+        max_value = labels.max()
+        new_dtype = None
+        for dtype in list(MASK_DTYPE_SIZE.values())[2:]:
+            # choose first dtype that handles max_value
+            if np.iinfo(dtype).max >= max_value:
+                new_dtype = dtype
+                break
+        LOGGER.debug("Convering labels to dtype %s" % new_dtype)
+        labels = labels.astype(new_dtype)
 
         return labels, fillColors, properties
