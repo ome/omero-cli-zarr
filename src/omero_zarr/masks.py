@@ -517,17 +517,18 @@ class MaskSaver:
                             if check_overlaps and np.any(
                                 np.logical_and(
                                     labels[
-                                        i_t, i_c, i_z, y : (y + h), x : (x + w)
+                                        i_t, i_c, i_z, y :(y + h), x :(x + w)
                                     ].astype(np.bool),
                                     binim_yx,
                                 )
                             ):
                                 raise Exception(
-                                    f"Mask {shape.roi.id.val} overlaps with existing labels"
+                                    f"Mask {shape.roi.id.val} overlaps "
+                                    "with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous shapes
-                            labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
+                            labels[i_t, i_c, i_z, y :(y + h), x :(x + w)] += (
                                 binim_yx * shape_value
                             )
         max_value = labels.max()
