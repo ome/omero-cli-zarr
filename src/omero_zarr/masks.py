@@ -491,12 +491,15 @@ class MaskSaver:
         fillColors: Dict[int, str] = {}
         properties: Dict[int, Dict] = {}
 
+        min_roi_id = min([shape.roi.id.val for mask in masks for shape in mask])
+        LOGGER.debug("Min ROI ID: %s" % min_roi_id)
+
         for count, shapes in enumerate(masks):
             for shape in shapes:
                 # Using ROI ID allows stitching label from multiple images
                 # into a Plate and not creating duplicates from different iamges.
                 # All shapes will be the same value (color) for each ROI
-                shape_value = shape.roi.id.val
+                shape_value = shape.roi.id.val - min_roi_id + 1
                 properties[shape_value] = {
                     "omero:shapeId": shape.id.val,
                     "omero:roiId": shape.roi.id.val,
@@ -520,7 +523,7 @@ class MaskSaver:
                                 )
                             ):
                                 raise Exception(
-                                    f"Mask {shape_value} overlaps with existing labels"
+                                    f"Mask {shape.roi.id.val} overlaps with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous shapes
