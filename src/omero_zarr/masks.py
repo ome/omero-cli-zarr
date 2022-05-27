@@ -491,7 +491,7 @@ class MaskSaver:
         fillColors: Dict[int, str] = {}
         properties: Dict[int, Dict] = {}
 
-        min_roi_id = min([shape.roi.id.val for mask in masks for shape in mask])
+        min_roi_id = min(shape.roi.id.val for mask in masks for shape in mask)
         LOGGER.debug("Min ROI ID: %s" % min_roi_id)
 
         for count, shapes in enumerate(masks):
