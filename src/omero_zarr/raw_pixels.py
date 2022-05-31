@@ -294,7 +294,7 @@ def plate_to_zarr(
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
 
     image_data = {
-        "id": 1,
+        "id": image.getId(),
         "channels": [channelMarshal(c) for c in image.getChannels()],
         "rdefs": {
             "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
