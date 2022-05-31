@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, List
 
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
-from omero.gateway import BlitzGateway, BlitzObjectWrapper
+from omero.gateway import BlitzGateway, BlitzObjectWrapper, ImageWrapper
 from omero.model import ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
@@ -324,7 +324,7 @@ class ZarrControl(BaseControl):
         return obj
 
     def _bf_export(self, obj: BlitzObjectWrapper, args: argparse.Namespace) -> None:
-        def _get_first_image(obj):
+        def _get_first_image(obj: BlitzObjectWrapper) -> ImageWrapper:
             if obj.OMERO_CLASS == "Plate":
                 for well in obj.listChildren():
                     for ws in well.listChildren():
@@ -393,7 +393,7 @@ class ZarrControl(BaseControl):
         if obj.OMERO_CLASS == "Image":
             # Add OMERO metadata
             store = FSStore(
-                str(image_target.resolve()),
+                str(zarr_target.resolve()),
                 auto_mkdir=False,
                 normalize_keys=False,
                 mode="w",

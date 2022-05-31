@@ -211,7 +211,9 @@ def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> 
 
 
 def plate_to_zarr(
-    plate: omero.gateway._PlateWrapper, args: argparse.Namespace, write_binary=True
+    plate: omero.gateway._PlateWrapper,
+    args: argparse.Namespace,
+    write_binary: Optional[bool] = True,
 ) -> None:
     """
     Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
