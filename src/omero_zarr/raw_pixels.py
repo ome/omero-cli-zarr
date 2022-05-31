@@ -210,7 +210,7 @@ def marshal_acquisition(acquisition: omero.gateway._PlateAcquisitionWrapper) -> 
     return acq
 
 
-def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) -> None:
+def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace, write_binary=True) -> None:
     """
     Exports a plate to a zarr file using the hierarchy discussed here ('Option 3'):
     https://github.com/ome/omero-ms-zarr/issues/73#issuecomment-706770955
@@ -262,23 +262,26 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                add_image(img, field_group, cache_dir=cache_dir)
+                if write_binary:
+                    add_image(img, field_group, cache_dir=cache_dir)
                 add_omero_metadata(field_group, img)
-                # Update Well metadata after each image
-                write_well_metadata(col_group, fields)
+                if write_binary:
+                    # Update Well metadata after each image
+                    write_well_metadata(col_group, fields)
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
-        # Update plate_metadata after each Well
-        write_plate_metadata(
-            root,
-            row_names,
-            col_names,
-            wells=list(well_paths),
-            field_count=max_fields,
-            acquisitions=plate_acq,
-            name=plate.name,
-        )
+        if write_binary:
+            # Update plate_metadata after each Well
+            write_plate_metadata(
+                root,
+                row_names,
+                col_names,
+                wells=list(well_paths),
+                field_count=max_fields,
+                acquisitions=plate_acq,
+                name=plate.name,
+            )
 
     add_toplevel_metadata(root)
     print("Finished.")

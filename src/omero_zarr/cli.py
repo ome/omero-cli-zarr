@@ -307,7 +307,11 @@ class ZarrControl(BaseControl):
                 image_to_zarr(image, args)
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
-            plate_to_zarr(plate, args)
+            if args.bf or args.bfpath:
+                self._bf_export(plate, args)
+                plate_to_zarr(plate, args, write_binary=False)
+            else:
+                plate_to_zarr(plate, args, write_binary=True)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
@@ -319,25 +323,25 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
+    def _bf_export(self, obj: BlitzObjectWrapper, args: argparse.Namespace) -> None:
         if args.bfpath:
             abs_path = Path(args.bfpath)
-        elif image.getInplaceImport():
-            p = image.getImportedImageFilePaths()["client_paths"][0]
+        elif obj.getInplaceImport():
+            p = obj.getImportedImageFilePaths()["client_paths"][0]
             abs_path = Path("/") / Path(p)
         else:
             if self.client is None:
                 raise Exception("This cannot happen")  # mypy is confused
             prx, desc = self.client.getManagedRepository(description=True)
-            p = image.getImportedImageFilePaths()["server_paths"][0]
+            p = obj.getImportedImageFilePaths()["server_paths"][0]
             abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
-        temp_target = (Path(args.output) or Path.cwd()) / f"{image.id}.tmp"
-        image_target = (Path(args.output) or Path.cwd()) / f"{image.id}.zarr"
+        temp_target = (Path(args.output) or Path.cwd()) / f"{obj.id}.tmp"
+        zarr_target = (Path(args.output) or Path.cwd()) / f"{obj.id}.zarr"
 
         if temp_target.exists():
             self.ctx.die(111, f"{temp_target.resolve()} already exists")
-        if image_target.exists():
-            self.ctx.die(111, f"{image_target.resolve()} already exists")
+        if zarr_target.exists():
+            self.ctx.die(111, f"{zarr_target.resolve()} already exists")
 
         cmd: List[str] = [
             "bioformats2raw",
@@ -353,9 +357,10 @@ class ZarrControl(BaseControl):
             cmd.append(f"--resolutions={args.resolutions}")
         if args.max_workers:
             cmd.append(f"--max_workers={args.max_workers}")
-        cmd.append(f"--series={image.series}")
-        cmd.append("--no-root-group")
-        cmd.append("--no-ome-meta-export")
+        if obj.OMERO_CLASS == "Image":
+            cmd.append(f"--series={obj.series}")
+            cmd.append("--no-root-group")
+            cmd.append("--no-ome-meta-export")
 
         self.ctx.dbg(" ".join(cmd))
         process = subprocess.Popen(
@@ -367,21 +372,26 @@ class ZarrControl(BaseControl):
         if stderr:
             self.ctx.err(stderr.decode("utf-8"))
         if process.returncode == 0:
-            image_source = temp_target / "0"
-            image_source.rename(image_target)
-            temp_target.rmdir()
-            self.ctx.out(f"Image exported to {image_target.resolve()}")
+            if obj.OMERO_CLASS == "Image":
+                image_source = temp_target / "0"
+                image_source.rename(zarr_target)
+                temp_target.rmdir()
+            else:
+                temp_target.rename(zarr_target)
+            self.ctx.out(f"{obj.OMERO_CLASS} exported to {zarr_target.resolve()}")
 
-        # Add OMERO metadata
-        store = FSStore(
-            str(image_target.resolve()),
-            auto_mkdir=False,
-            normalize_keys=False,
-            mode="w",
-        )
-        root = open_group(store)
-        add_omero_metadata(root, image)
-        add_toplevel_metadata(root)
+        if obj.OMERO_CLASS == "Image":
+            # Add OMERO metadata
+            store = FSStore(
+                str(image_target.resolve()),
+                auto_mkdir=False,
+                normalize_keys=False,
+                mode="w",
+            )
+
+            root = open_group(store)
+            add_omero_metadata(root, obj)
+            add_toplevel_metadata(root)
 
 
 try:
