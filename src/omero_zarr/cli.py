@@ -324,7 +324,6 @@ class ZarrControl(BaseControl):
         return obj
 
     def _bf_export(self, obj: BlitzObjectWrapper, args: argparse.Namespace) -> None:
-
         def _get_first_image(obj):
             if obj.OMERO_CLASS == "Plate":
                 for well in obj.listChildren():
