@@ -323,17 +323,24 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
+    def _get_first_imported_filepath(self, obj: BlitzObjectWrapper,path_type: str):
+        if obj.OMERO_CLASS == "Plate":
+            for well in obj.listChildren():
+                for ws in well.listChildren():
+                    return _get_first_imported_path(ws.getImage(), path_type)
+        return obj.getImportedImageFilePaths()[path_type][0]
+
     def _bf_export(self, obj: BlitzObjectWrapper, args: argparse.Namespace) -> None:
         if args.bfpath:
             abs_path = Path(args.bfpath)
         elif obj.getInplaceImport():
-            p = obj.getImportedImageFilePaths()["client_paths"][0]
+            p = _get_first_imported_filepath(obj, "client_paths")
             abs_path = Path("/") / Path(p)
         else:
             if self.client is None:
                 raise Exception("This cannot happen")  # mypy is confused
             prx, desc = self.client.getManagedRepository(description=True)
-            p = obj.getImportedImageFilePaths()["server_paths"][0]
+            p = _get_first_imported_filepath(obj, "server_paths")
             abs_path = Path(desc._path._val) / Path(desc._name._val) / Path(p)
         temp_target = (Path(args.output) or Path.cwd()) / f"{obj.id}.tmp"
         zarr_target = (Path(args.output) or Path.cwd()) / f"{obj.id}.zarr"
