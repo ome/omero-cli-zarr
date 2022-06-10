@@ -491,15 +491,16 @@ class MaskSaver:
         fillColors: Dict[int, str] = {}
         properties: Dict[int, Dict] = {}
 
-        min_roi_id = min(shape.roi.id.val for mask in masks for shape in mask)
-        LOGGER.debug("Min ROI ID: %s" % min_roi_id)
+        roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
+        sorted_roi_ids = list(set(roi_ids))
+        sorted_roi_ids.sort()
 
         for count, shapes in enumerate(masks):
             for shape in shapes:
                 # Using ROI ID allows stitching label from multiple images
                 # into a Plate and not creating duplicates from different iamges.
                 # All shapes will be the same value (color) for each ROI
-                shape_value = shape.roi.id.val - min_roi_id + 1
+                shape_value = sorted_roi_ids.index(shape.roi.id.val) + 1
                 properties[shape_value] = {
                     "omero:shapeId": shape.id.val,
                     "omero:roiId": shape.roi.id.val,
