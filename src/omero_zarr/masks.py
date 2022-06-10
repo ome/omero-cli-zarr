@@ -539,7 +539,7 @@ class MaskSaver:
             if np.iinfo(dtype).max >= max_value:
                 new_dtype = dtype
                 break
-        LOGGER.debug("Convering labels to dtype %s" % new_dtype)
+        LOGGER.debug("Converting labels to dtype %s" % new_dtype)
         labels = labels.astype(new_dtype)
 
         return labels, fillColors, properties
