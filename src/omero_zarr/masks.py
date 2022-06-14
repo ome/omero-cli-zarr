@@ -314,7 +314,6 @@ class MaskSaver:
 
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)
-        # pyramid_grp = out_labels.require_group(name)
         transformations = marshal_transformations(self.image, levels=len(label_pyramid))
 
         # Specify and store metadata
