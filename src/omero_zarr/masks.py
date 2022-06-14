@@ -486,7 +486,7 @@ class MaskSaver:
         # find most suitable dtype...
         labels_dtype = np.int64
         sorted_dtypes = [kv for kv in MASK_DTYPE_SIZE.items()]
-        sorted_dtypes.sort(key=lambda x:x[0])
+        sorted_dtypes.sort(key=lambda x: x[0])
         # ignore first dtype (bool)
         for int_dtype in sorted_dtypes[1:]:
             dtype = int_dtype[1]
