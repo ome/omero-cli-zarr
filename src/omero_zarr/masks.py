@@ -477,7 +477,25 @@ class MaskSaver:
         size_z: int = mask_shape[2]
         ignored_dimensions = ignored_dimensions or set()
 
-        labels = np.zeros(mask_shape, np.int64)
+        roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
+        sorted_roi_ids = list(set(roi_ids))
+        sorted_roi_ids.sort()
+
+        # label values are 1...n
+        max_value = len(sorted_roi_ids)
+        # find most suitable dtype...
+        labels_dtype = np.int64
+        sorted_dtypes = [kv for kv in MASK_DTYPE_SIZE.items()]
+        sorted_dtypes.sort(key=lambda x:x[0])
+        # ignore first dtype (bool)
+        for int_dtype in sorted_dtypes[1:]:
+            dtype = int_dtype[1]
+            # choose first dtype that handles max_value
+            if np.iinfo(dtype).max >= max_value:
+                labels_dtype = dtype
+                break
+        LOGGER.debug("Exporting labels to dtype %s" % labels_dtype)
+        labels = np.zeros(mask_shape, labels_dtype)
 
         for d in "TCZYX":
             if d in ignored_dimensions:
@@ -490,10 +508,6 @@ class MaskSaver:
 
         fillColors: Dict[int, str] = {}
         properties: Dict[int, Dict] = {}
-
-        roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
-        sorted_roi_ids = list(set(roi_ids))
-        sorted_roi_ids.sort()
 
         for count, shapes in enumerate(masks):
             for shape in shapes:
@@ -532,14 +546,5 @@ class MaskSaver:
                             labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
                                 binim_yx * shape_value
                             )
-        max_value = labels.max()
-        new_dtype = None
-        for dtype in list(MASK_DTYPE_SIZE.values())[2:]:
-            # choose first dtype that handles max_value
-            if np.iinfo(dtype).max >= max_value:
-                new_dtype = dtype
-                break
-        LOGGER.debug("Converting labels to dtype %s" % new_dtype)
-        labels = labels.astype(new_dtype)
 
         return labels, fillColors, properties
