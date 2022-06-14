@@ -1,4 +1,5 @@
 import argparse
+import logging
 import re
 import time
 from collections import defaultdict
@@ -20,6 +21,8 @@ from zarr.hierarchy import open_group
 
 from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
+
+LOGGER = logging.getLogger("omero_zarr.masks")
 
 # Mapping of dimension names to axes in the Zarr
 DIMENSION_ORDER: Dict[str, int] = {
@@ -474,7 +477,25 @@ class MaskSaver:
         size_z: int = mask_shape[2]
         ignored_dimensions = ignored_dimensions or set()
 
-        labels = np.zeros(mask_shape, np.int64)
+        roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
+        sorted_roi_ids = list(set(roi_ids))
+        sorted_roi_ids.sort()
+
+        # label values are 1...n
+        max_value = len(sorted_roi_ids)
+        # find most suitable dtype...
+        labels_dtype = np.int64
+        sorted_dtypes = [kv for kv in MASK_DTYPE_SIZE.items()]
+        sorted_dtypes.sort(key=lambda x: x[0])
+        # ignore first dtype (bool)
+        for int_dtype in sorted_dtypes[1:]:
+            dtype = int_dtype[1]
+            # choose first dtype that handles max_value
+            if np.iinfo(dtype).max >= max_value:
+                labels_dtype = dtype
+                break
+        LOGGER.debug("Exporting labels to dtype %s" % labels_dtype)
+        labels = np.zeros(mask_shape, labels_dtype)
 
         for d in "TCZYX":
             if d in ignored_dimensions:
@@ -493,7 +514,7 @@ class MaskSaver:
                 # Using ROI ID allows stitching label from multiple images
                 # into a Plate and not creating duplicates from different iamges.
                 # All shapes will be the same value (color) for each ROI
-                shape_value = shape.roi.id.val
+                shape_value = sorted_roi_ids.index(shape.roi.id.val) + 1
                 properties[shape_value] = {
                     "omero:shapeId": shape.id.val,
                     "omero:roiId": shape.roi.id.val,
@@ -517,7 +538,8 @@ class MaskSaver:
                                 )
                             ):
                                 raise Exception(
-                                    f"Mask {shape_value} overlaps with existing labels"
+                                    f"Mask {shape.roi.id.val} overlaps "
+                                    "with existing labels"
                                 )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous shapes
