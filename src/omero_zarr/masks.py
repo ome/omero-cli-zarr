@@ -9,17 +9,16 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 import omero.clients  # noqa
 from ome_zarr.conversions import int_to_rgba_255
-from ome_zarr.data import write_multiscale
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Multiscales, Node
 from ome_zarr.scale import Scaler
 from ome_zarr.types import JSONDict
+from ome_zarr.writer import write_multiscale_labels
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 LOGGER = logging.getLogger("omero_zarr.masks")
@@ -272,9 +271,6 @@ class MaskSaver:
         if self.plate:
             assert self.plate_path, "Need image path within the plate"
             source_image = f"{source_image}/{self.plate_path}"
-            current_path = f"{self.plate_path}/{self.path}"
-        else:
-            current_path = self.path
 
         print(f"source_image {source_image}")
         src = parse_url(source_image)
@@ -286,10 +282,10 @@ class MaskSaver:
         store = open_store(filename)
         root = open_group(store)
 
-        if current_path in root.group_keys():
-            out_labels = getattr(root, current_path)
+        if self.plate:
+            label_group = root.require_group(self.plate_path)
         else:
-            out_labels = root.require_group(current_path)
+            label_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
         for d in ignored_dimensions:
@@ -321,21 +317,12 @@ class MaskSaver:
 
         scaler = Scaler(max_layer=input_pyramid_levels)
         label_pyramid = scaler.nearest(labels)
-        pyramid_grp = out_labels.require_group(name)
         transformations = marshal_transformations(self.image, levels=len(label_pyramid))
-
-        write_multiscale(
-            label_pyramid,
-            pyramid_grp,
-            axes=axes,
-            coordinate_transformations=transformations,
-        )  # TODO: dtype, chunks, overwite
 
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
         image_label = {
-            "version": VERSION,
             "colors": image_label_colors,
             "properties": label_properties,
             "source": {"image": source_image_link},
@@ -349,19 +336,15 @@ class MaskSaver:
                 image_label_colors.append(
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
-        # TODO: move to write method
-        pyramid_grp.attrs["image-label"] = image_label
 
-        # Register with labels metadata
-        print(f"Created {filename}/{current_path}/{name}")
-        attrs = out_labels.attrs.asdict()
-        # TODO: could temporarily support "masks" here as well
-        if "labels" in attrs:
-            if name not in attrs["labels"]:
-                attrs["labels"].append(name)
-        else:
-            attrs["labels"] = [name]
-        out_labels.attrs.update(attrs)
+        write_multiscale_labels(
+            label_pyramid,
+            label_group,
+            name,
+            axes=axes,
+            coordinate_transformations=transformations,
+            label_metadata=image_label,
+        )
 
     def shape_to_binim_yx(
         self, shape: omero.model.Shape
