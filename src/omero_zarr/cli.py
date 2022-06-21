@@ -272,6 +272,11 @@ class ZarrControl(BaseControl):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
             )
+        for subcommand in (polygons, masks):
+            subcommand.add_argument(
+                "--allow_overlaps", action="store_true",
+                help="Allow overlapping shapes. Output labels will add values in overlapping regions"
+            )
 
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:
