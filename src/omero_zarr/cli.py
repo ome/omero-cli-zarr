@@ -276,7 +276,8 @@ class ZarrControl(BaseControl):
             subcommand.add_argument(
                 "--allow_overlaps",
                 action="store_true",
-                help="Allow overlapping shapes. Output labels will add values in overlapping regions",
+                help="Allow overlapping shapes."
+                " Output labels will add values in overlapping regions",
             )
 
     @gateway_required
