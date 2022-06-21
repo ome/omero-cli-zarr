@@ -152,10 +152,16 @@ def image_shapes_to_zarr(
         print("Boolean type makes no sense for labeled. Using 64")
         dtype = MASK_DTYPE_SIZE[64]
 
-    check_overlaps = (not args.allow_overlaps)
+    check_overlaps = not args.allow_overlaps
     if masks:
         saver = MaskSaver(
-            None, image, dtype, args.label_path, args.style, args.source_image, check_overlaps
+            None,
+            image,
+            dtype,
+            args.label_path,
+            args.style,
+            args.source_image,
+            check_overlaps,
         )
 
         if args.style == "split":
