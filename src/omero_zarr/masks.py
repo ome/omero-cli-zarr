@@ -65,8 +65,13 @@ def plate_shapes_to_zarr(
 
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
     saver = MaskSaver(
-        plate, None, dtype, args.label_path, args.style, args.source_image,
-        check_overlaps
+        plate,
+        None,
+        dtype,
+        args.label_path,
+        args.style,
+        args.source_image,
+        check_overlaps,
     )
 
     count = 0
