@@ -78,13 +78,13 @@ To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons`
     # e.g. Export to 1.zarr/labels/A
     $ omero zarr masks Image:1 --label-name=A
 
-    # Allow overlapping masks or polygons (overlap will be sum of each label)
-    $ omero zarr polygons Image:1 --allow_overlaps
+    # Allow overlapping masks or polygons (overlap will be maximum value of the dtype)
+    $ omero zarr polygons Image:1 --overlaps=dtype_max
 
 The default behaviour is to export all masks or polygons on the Image to a single 5D
 "labeled" zarr array, with a different value for each Shape.
-An exception will be thrown if any of the masks overlap, unless the `--allow_overlaps`
-flag is used as above.
+An exception will be thrown if any of the masks overlap, unless the `--overlaps`
+option is used as above.
 
 An alternative to handle overlapping masks is to split masks into non-overlapping zarr
 groups using a "label-map" which is a csv file that specifies the name of

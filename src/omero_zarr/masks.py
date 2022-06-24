@@ -60,9 +60,13 @@ def plate_shapes_to_zarr(
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
 
+    # If overlaps isn't 'dtype_max', an exception is thrown if any overlaps exist
+    check_overlaps = args.overlaps != "dtype_max"
+
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
     saver = MaskSaver(
-        plate, None, dtype, args.label_path, args.style, args.source_image
+        plate, None, dtype, args.label_path, args.style, args.source_image,
+        check_overlaps
     )
 
     count = 0
@@ -152,7 +156,8 @@ def image_shapes_to_zarr(
         print("Boolean type makes no sense for labeled. Using 64")
         dtype = MASK_DTYPE_SIZE[64]
 
-    check_overlaps = not args.allow_overlaps
+    # If overlaps isn't 'dtype_max', an exception is thrown if any overlaps exist
+    check_overlaps = args.overlaps != "dtype_max"
     if masks:
         saver = MaskSaver(
             None,

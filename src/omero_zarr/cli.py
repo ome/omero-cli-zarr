@@ -274,10 +274,10 @@ class ZarrControl(BaseControl):
             )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
-                "--allow_overlaps",
-                action="store_true",
-                help="Allow overlapping shapes. All overlapping regions"
-                " will be set to the max value for the dtype",
+                "--overlaps", type=str, choices=["dtype_max"],
+                help="To allow overlapping shapes, use 'dtype_max':"
+                " All overlapping regions will be set to the"
+                " max value for the dtype",
             )
 
     @gateway_required
