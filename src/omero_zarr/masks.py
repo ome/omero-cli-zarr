@@ -522,9 +522,9 @@ class MaskSaver:
                             ignored_dimensions, "Z", z, size_z
                         ):
                             overlap = np.logical_and(
-                                labels[
-                                    i_t, i_c, i_z, y : (y + h), x : (x + w)
-                                ].astype(np.bool),
+                                labels[i_t, i_c, i_z, y : (y + h), x : (x + w)].astype(
+                                    np.bool
+                                ),
                                 binim_yx,
                             )
                             # ADD to the array, so zeros in our binarray don't
@@ -542,5 +542,6 @@ class MaskSaver:
                                 else:
                                     # set overlapping region to max(dtype)
                                     labels[i_t, i_c, i_z, y : (y + h), x : (x + w)][
-                                        overlap] = np.iinfo(labels_dtype).max
+                                        overlap
+                                    ] = np.iinfo(labels_dtype).max
         return labels, fillColors, properties
