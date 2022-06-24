@@ -521,22 +521,26 @@ class MaskSaver:
                         for i_z in self._get_indices(
                             ignored_dimensions, "Z", z, size_z
                         ):
-                            if check_overlaps and np.any(
-                                np.logical_and(
-                                    labels[
-                                        i_t, i_c, i_z, y : (y + h), x : (x + w)
-                                    ].astype(np.bool),
-                                    binim_yx,
-                                )
-                            ):
-                                raise Exception(
-                                    f"Mask {shape.roi.id.val} overlaps "
-                                    "with existing labels"
-                                )
+                            overlap = np.logical_and(
+                                labels[
+                                    i_t, i_c, i_z, y : (y + h), x : (x + w)
+                                ].astype(np.bool),
+                                binim_yx,
+                            )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous shapes
                             labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
                                 binim_yx * shape_value
                             )
 
+                            if np.any(overlap):
+                                if check_overlaps:
+                                    raise Exception(
+                                        f"Shape {shape.roi.id.val} overlaps "
+                                        "with existing labels"
+                                    )
+                                else:
+                                    # set overlapping region to max(dtype)
+                                    labels[i_t, i_c, i_z, y : (y + h), x : (x + w)][
+                                        overlap] = np.iinfo(labels_dtype).max
         return labels, fillColors, properties
