@@ -60,9 +60,6 @@ def plate_shapes_to_zarr(
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
 
-    # If overlaps isn't 'dtype_max', an exception is thrown if any overlaps exist
-    check_overlaps = args.overlaps != "dtype_max"
-
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
     saver = MaskSaver(
         plate,
@@ -71,7 +68,7 @@ def plate_shapes_to_zarr(
         args.label_path,
         args.style,
         args.source_image,
-        check_overlaps,
+        args=args,
     )
 
     count = 0
@@ -161,8 +158,6 @@ def image_shapes_to_zarr(
         print("Boolean type makes no sense for labeled. Using 64")
         dtype = MASK_DTYPE_SIZE[64]
 
-    # If overlaps isn't 'dtype_max', an exception is thrown if any overlaps exist
-    check_overlaps = args.overlaps != "dtype_max"
     if masks:
         saver = MaskSaver(
             None,
@@ -171,7 +166,7 @@ def image_shapes_to_zarr(
             args.label_path,
             args.style,
             args.source_image,
-            check_overlaps,
+            args=args,
         )
 
         if args.style == "split":
@@ -195,6 +190,8 @@ class MaskSaver:
     masks to zarr groups/arrays.
     """
 
+    OVERLAPS = ["error", "dtype_max"]
+
     def __init__(
         self,
         plate: Optional[omero.gateway.PlateWrapper],
@@ -203,7 +200,7 @@ class MaskSaver:
         path: str = "labels",
         style: str = "labeled",
         source: str = "..",
-        check_overlaps: bool = True,
+        args: argparse.Namespace = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -211,7 +208,10 @@ class MaskSaver:
         self.source_image = source
         self.plate = plate
         self.plate_path = Optional[str]
-        self.check_overlaps = check_overlaps
+        if args is not None and args.overlaps is not None:
+            self.overlaps = args.overlaps
+        else:
+            self.overlaps = "error"
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -321,7 +321,6 @@ class MaskSaver:
             masks,
             mask_shape,
             ignored_dimensions,
-            check_overlaps=self.check_overlaps,
         )
 
         axes = marshal_axes(self.image)
@@ -452,7 +451,7 @@ class MaskSaver:
         masks: List[omero.model.Mask],
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Set[str] = None,
-        check_overlaps: bool = True,
+        check_overlaps: bool = None,
     ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
@@ -482,6 +481,11 @@ class MaskSaver:
         roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
         sorted_roi_ids = list(set(roi_ids))
         sorted_roi_ids.sort()
+
+        if check_overlaps is None:
+            # If overlaps isn't 'dtype_max', an exception is thrown
+            # if any overlaps exist
+            check_overlaps = self.overlaps != "dtype_max"
 
         # label values are 1...n
         max_value = len(sorted_roi_ids)
