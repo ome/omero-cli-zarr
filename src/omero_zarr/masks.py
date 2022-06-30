@@ -68,7 +68,7 @@ def plate_shapes_to_zarr(
         args.label_path,
         args.style,
         args.source_image,
-        args=args,
+        args.overlaps,
     )
 
     count = 0
@@ -166,7 +166,7 @@ def image_shapes_to_zarr(
             args.label_path,
             args.style,
             args.source_image,
-            args=args,
+            args.overlaps,
         )
 
         if args.style == "split":
@@ -200,7 +200,7 @@ class MaskSaver:
         path: str = "labels",
         style: str = "labeled",
         source: str = "..",
-        args: argparse.Namespace = None,
+        overlaps: str = "error",
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -208,10 +208,7 @@ class MaskSaver:
         self.source_image = source
         self.plate = plate
         self.plate_path = Optional[str]
-        if args is not None and args.overlaps is not None:
-            self.overlaps = args.overlaps
-        else:
-            self.overlaps = "error"
+        self.overlaps = overlaps
         if image:
             self.image = image
             self.size_t = image.getSizeT()
