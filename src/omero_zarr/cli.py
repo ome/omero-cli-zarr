@@ -11,7 +11,12 @@ from omero.model import ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
-from .masks import MASK_DTYPE_SIZE, image_shapes_to_zarr, plate_shapes_to_zarr
+from .masks import (
+    MASK_DTYPE_SIZE,
+    MaskSaver,
+    image_shapes_to_zarr,
+    plate_shapes_to_zarr,
+)
 from .raw_pixels import (
     add_omero_metadata,
     add_toplevel_metadata,
@@ -271,6 +276,16 @@ class ZarrControl(BaseControl):
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
+            )
+        for subcommand in (polygons, masks):
+            subcommand.add_argument(
+                "--overlaps",
+                type=str,
+                default=MaskSaver.OVERLAPS[0],
+                choices=MaskSaver.OVERLAPS,
+                help="To allow overlapping shapes, use 'dtype_max':"
+                " All overlapping regions will be set to the"
+                " max value for the dtype",
             )
 
     @gateway_required

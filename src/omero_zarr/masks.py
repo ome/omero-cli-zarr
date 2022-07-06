@@ -62,7 +62,13 @@ def plate_shapes_to_zarr(
 
     dtype = MASK_DTYPE_SIZE[int(args.label_bits)]
     saver = MaskSaver(
-        plate, None, dtype, args.label_path, args.style, args.source_image
+        plate,
+        None,
+        dtype,
+        args.label_path,
+        args.style,
+        args.source_image,
+        args.overlaps,
     )
 
     count = 0
@@ -154,7 +160,13 @@ def image_shapes_to_zarr(
 
     if masks:
         saver = MaskSaver(
-            None, image, dtype, args.label_path, args.style, args.source_image
+            None,
+            image,
+            dtype,
+            args.label_path,
+            args.style,
+            args.source_image,
+            args.overlaps,
         )
 
         if args.style == "split":
@@ -178,6 +190,8 @@ class MaskSaver:
     masks to zarr groups/arrays.
     """
 
+    OVERLAPS = ("error", "dtype_max")
+
     def __init__(
         self,
         plate: Optional[omero.gateway.PlateWrapper],
@@ -186,6 +200,7 @@ class MaskSaver:
         path: str = "labels",
         style: str = "labeled",
         source: str = "..",
+        overlaps: str = "error",
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -193,6 +208,7 @@ class MaskSaver:
         self.source_image = source
         self.plate = plate
         self.plate_path = Optional[str]
+        self.overlaps = overlaps
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -302,7 +318,6 @@ class MaskSaver:
             masks,
             mask_shape,
             ignored_dimensions,
-            check_overlaps=True,
         )
 
         axes = marshal_axes(self.image)
@@ -433,7 +448,7 @@ class MaskSaver:
         masks: List[omero.model.Mask],
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Set[str] = None,
-        check_overlaps: bool = True,
+        check_overlaps: bool = None,
     ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
@@ -463,6 +478,11 @@ class MaskSaver:
         roi_ids = [shape.roi.id.val for mask in masks for shape in mask]
         sorted_roi_ids = list(set(roi_ids))
         sorted_roi_ids.sort()
+
+        if check_overlaps is None:
+            # If overlaps isn't 'dtype_max', an exception is thrown
+            # if any overlaps exist
+            check_overlaps = self.overlaps != "dtype_max"
 
         # label values are 1...n
         max_value = len(sorted_roi_ids)
@@ -512,22 +532,27 @@ class MaskSaver:
                         for i_z in self._get_indices(
                             ignored_dimensions, "Z", z, size_z
                         ):
-                            if check_overlaps and np.any(
-                                np.logical_and(
-                                    labels[
-                                        i_t, i_c, i_z, y : (y + h), x : (x + w)
-                                    ].astype(np.bool),
-                                    binim_yx,
-                                )
-                            ):
-                                raise Exception(
-                                    f"Mask {shape.roi.id.val} overlaps "
-                                    "with existing labels"
-                                )
+                            overlap = np.logical_and(
+                                labels[i_t, i_c, i_z, y : (y + h), x : (x + w)].astype(
+                                    np.bool
+                                ),
+                                binim_yx,
+                            )
                             # ADD to the array, so zeros in our binarray don't
                             # wipe out previous shapes
                             labels[i_t, i_c, i_z, y : (y + h), x : (x + w)] += (
                                 binim_yx * shape_value
                             )
 
+                            if np.any(overlap):
+                                if check_overlaps:
+                                    raise Exception(
+                                        f"Shape {shape.roi.id.val} overlaps "
+                                        "with existing labels"
+                                    )
+                                else:
+                                    # set overlapping region to max(dtype)
+                                    labels[i_t, i_c, i_z, y : (y + h), x : (x + w)][
+                                        overlap
+                                    ] = np.iinfo(labels_dtype).max
         return labels, fillColors, properties

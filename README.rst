@@ -59,10 +59,10 @@ To export images via bioformats2raw we use the ```--bf``` flag::
     $ omero zarr --output /home/user/zarr_files export 1 --bf
     Image exported to /home/user/zarr_files/2chZT.lsm
 
-Masks
-^^^^^
+Masks and Polygons
+^^^^^^^^^^^^^^^^^^
 
-To export Masks for an Image or Plate::
+To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons` command::
 
     # Saved under 1.zarr/labels/0 - 1.zarr/ must already exist
     $ omero zarr masks Image:1
@@ -78,12 +78,16 @@ To export Masks for an Image or Plate::
     # e.g. Export to 1.zarr/labels/A
     $ omero zarr masks Image:1 --label-name=A
 
-The default behaviour is to export all masks on the Image to a single 5D
-"labeled" zarr array, with a different value for each mask Shape.
-An exception will be thrown if any of the masks overlap.
+    # Allow overlapping masks or polygons (overlap will be maximum value of the dtype)
+    $ omero zarr polygons Image:1 --overlaps=dtype_max
 
-To handle overlapping masks, split masks into non-overlapping zarr groups
-using a "label-map" which is a csv file of that specifies the name of
+The default behaviour is to export all masks or polygons on the Image to a single 5D
+"labeled" zarr array, with a different value for each Shape.
+An exception will be thrown if any of the masks overlap, unless the `--overlaps`
+option is used as above.
+
+An alternative to handle overlapping masks is to split masks into non-overlapping zarr
+groups using a "label-map" which is a csv file that specifies the name of
 the zarr group for each ROI on the Image. Columns are ID, NAME, ROI_ID.
 
 For example, to create a group from the `textValue` of each Shape,
