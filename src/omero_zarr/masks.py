@@ -190,7 +190,7 @@ class MaskSaver:
     masks to zarr groups/arrays.
     """
 
-    OVERLAPS = ["error", "dtype_max"]
+    OVERLAPS = ("error", "dtype_max")
 
     def __init__(
         self,
