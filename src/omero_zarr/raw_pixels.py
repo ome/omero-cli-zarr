@@ -21,11 +21,48 @@ from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 
-def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
+def fileset_to_zarr(
+    fileset: omero.gateway.FilesetWrapper, args: argparse.Namespace
+) -> None:
+    """Exports a FileSet according to bioformats2raw.layout"""
+    images = list(fileset.copyImages())
+    images_to_zarr(images, args)
+
+
+def images_to_zarr(
+    images: List[omero.gateway.ImageWrapper],
+    args: argparse.Namespace,
+    target_dir: str = None,
+) -> None:
+    """Exports images in bioformats2raw.layout, each under path '0', '1' etc."""
+    if target_dir is None:
+        target_dir = args.output if args.output else "zarr_export"
+    dir_index = 1
+    dir_name = target_dir
+    while os.path.exists(dir_name):
+        dir_name = f"{target_dir}({dir_index})"
+        dir_index += 1
+    # TODO: generate OME/METADATA.xml
+    print("dir_name", dir_name)
+    for index, image in enumerate(images):
+        print("index, image", index, image)
+        target = os.path.join(dir_name, str(index))
+        image_to_zarr(image, args, target)
+
+
+def image_to_zarr(
+    image: omero.gateway.ImageWrapper, args: argparse.Namespace, target: str = None
+) -> None:
+    """
+    Export an image to zarr
+    @param target: Optional path/to/image.zarr. Default is args.output/ID.zarr
+    """
     target_dir = args.output
     cache_dir = target_dir if args.cache_numpy else None
-
-    name = os.path.join(target_dir, "%s.zarr" % image.id)
+    if target is None:
+        name = os.path.join(target_dir, "%s.zarr" % image.id)
+    else:
+        name = target
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)

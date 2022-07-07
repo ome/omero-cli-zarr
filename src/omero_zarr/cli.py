@@ -7,7 +7,7 @@ from typing import Any, Callable, List
 
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
-from omero.model import ImageI, PlateI
+from omero.model import FilesetI, ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
@@ -20,6 +20,7 @@ from .masks import (
 from .raw_pixels import (
     add_omero_metadata,
     add_toplevel_metadata,
+    fileset_to_zarr,
     image_to_zarr,
     plate_to_zarr,
 )
@@ -323,6 +324,9 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+        elif isinstance(args.object, FilesetI):
+            fileset = self._lookup(self.gateway, "Fileset", args.object.id)
+            fileset_to_zarr(fileset, args)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
