@@ -18,7 +18,13 @@ from zarr.hierarchy import Array, Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .util import (
+    get_minimum_image_ome_xml,
+    marshal_axes,
+    marshal_transformations,
+    open_store,
+    print_status,
+)
 
 
 def fileset_to_zarr(
@@ -42,10 +48,27 @@ def images_to_zarr(
     while os.path.exists(dir_name):
         dir_name = f"{target_dir}({dir_index})"
         dir_index += 1
-    # TODO: generate OME/METADATA.xml
-    print("dir_name", dir_name)
+    os.mkdir(dir_name)
+
+    # write bioformats2raw.layout
+    zattrs = os.path.join(dir_name, ".zattrs")
+    with open(zattrs, "w") as zfile:
+        zfile.write(
+            """{
+  "bioformats2raw.layout" : 3
+}"""
+        )
+    # write OME/METADATA.ome.xml
+    ome_dir = os.path.join(dir_name, "OME")
+    xml_path = os.path.join(ome_dir, "METADATA.ome.xml")
+    os.mkdir(ome_dir)
+    images = list(images)  # in case it's a generator
+    ome_xml = get_minimum_image_ome_xml(images)
+    with open(xml_path, "w") as xml_file:
+        xml_file.write(ome_xml)
+
+    # write images
     for index, image in enumerate(images):
-        print("index, image", index, image)
         target = os.path.join(dir_name, str(index))
         image_to_zarr(image, args, target)
 
