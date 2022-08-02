@@ -1,17 +1,10 @@
 import time
 from typing import Dict, List
 
+from ome_types import to_xml
+from ome_types.model import OME, Image, Pixels
+from ome_types.model.simple_types import ImageID, PixelsID, PixelType
 from omero.gateway import ImageWrapper
-from omero.model.enums import (
-    PixelsTypedouble,
-    PixelsTypefloat,
-    PixelsTypeint8,
-    PixelsTypeint16,
-    PixelsTypeint32,
-    PixelsTypeuint8,
-    PixelsTypeuint16,
-    PixelsTypeuint32,
-)
 from zarr.storage import FSStore
 
 
@@ -127,50 +120,25 @@ def marshal_transformations(
 def get_minimum_image_ome_xml(images: List[ImageWrapper]) -> str:
     """Generates minimal OME.xml for"""
 
-    omero_pix_types = {
-        PixelsTypeint8: "int8",
-        PixelsTypeuint8: "uint8",
-        PixelsTypeint16: "int16",
-        PixelsTypeuint16: "uint16",
-        PixelsTypeint32: "int32",
-        PixelsTypeuint32: "uint32",
-        PixelsTypefloat: "float32",
-        PixelsTypedouble: "double",
-    }
+    ome = OME()
 
-    images_xml = []
     for image in images:
-        image_id = image.id
-        name = image.name
         pixels_id = image.getPixelsId()
+        pix = image.getPrimaryPixels()
         pixels_type = image.getPrimaryPixels().getPixelsType().getValue()
-        p_type = omero_pix_types[pixels_type]
-        size_x = image.getSizeX()
-        size_y = image.getSizeY()
-        size_z = image.getSizeZ()
-        size_c = image.getSizeC()
-        size_t = image.getSizeT()
-        images_xml.append(
-            f"""<Image ID="Image:{image_id}" Name="{name}">
-    <Pixels
-        ID="Pixels:{pixels_id}"
-        DimensionOrder="XYZCT"
-        Type="{p_type}"
-        SizeX="{size_x}"
-        SizeY="{size_y}"
-        SizeZ="{size_z}"
-        SizeC="{size_c}"
-        SizeT="{size_t}">
-        <MetadataOnly/>
-    </Pixels>
-  </Image>"""
+        ptype = PixelType(pixels_type)
+        pixels = Pixels(
+            id=PixelsID("Pixels:%s" % pixels_id),
+            dimension_order=pix.getDimensionOrder().getValue(),
+            size_c=image.getSizeC(),
+            size_t=image.getSizeT(),
+            size_z=image.getSizeZ(),
+            size_x=image.getSizeX(),
+            size_y=image.getSizeY(),
+            type=ptype,
+            metadata_only=True,
         )
+        img = Image(id=ImageID("Image:%s" % image.id), pixels=pixels, name=image.name)
+        ome.images.append(img)
 
-    img_xml = "\n".join(images_xml)
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"
-     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-     xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06
-                         http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">
-    {img_xml}
-</OME>"""
+    return to_xml(ome)
