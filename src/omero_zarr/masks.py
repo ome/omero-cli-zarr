@@ -497,7 +497,7 @@ class MaskSaver:
             if np.iinfo(dtype).max >= max_value:
                 labels_dtype = dtype
                 break
-        LOGGER.debug("Exporting labels to dtype %s" % labels_dtype)
+        LOGGER.debug("Exporting labels to dtype %s", labels_dtype)
         labels = np.zeros(mask_shape, labels_dtype)
 
         for d in "TCZYX":
