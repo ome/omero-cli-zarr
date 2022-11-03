@@ -46,17 +46,17 @@ def marshal_pixel_sizes(image: ImageWrapper) -> Dict[str, Dict]:
     # All OMERO units.lower() are valid UDUNITS-2 and therefore NGFF spec
     if pix_size_x is not None:
         pixel_sizes["x"] = {
-            "units": str(pix_size_x.getUnit()).lower(),
+            "unit": str(pix_size_x.getUnit()).lower(),
             "value": pix_size_x.getValue(),
         }
     if pix_size_y is not None:
         pixel_sizes["y"] = {
-            "units": str(pix_size_y.getUnit()).lower(),
+            "unit": str(pix_size_y.getUnit()).lower(),
             "value": pix_size_y.getValue(),
         }
     if pix_size_z is not None:
         pixel_sizes["z"] = {
-            "units": str(pix_size_z.getUnit()).lower(),
+            "unit": str(pix_size_z.getUnit()).lower(),
             "value": pix_size_z.getValue(),
         }
     return pixel_sizes
@@ -77,12 +77,12 @@ def marshal_axes(image: ImageWrapper) -> List[Dict]:
     if size_z > 1:
         axes.append({"name": "z", "type": "space"})
         if pixel_sizes and "z" in pixel_sizes:
-            axes[-1]["units"] = pixel_sizes["z"]["units"]
+            axes[-1]["unit"] = pixel_sizes["z"]["unit"]
     # last 2 dimensions are always y and x
     for dim in ("y", "x"):
         axes.append({"name": dim, "type": "space"})
         if pixel_sizes and dim in pixel_sizes:
-            axes[-1]["units"] = pixel_sizes[dim]["units"]
+            axes[-1]["unit"] = pixel_sizes[dim]["unit"]
 
     return axes
 
