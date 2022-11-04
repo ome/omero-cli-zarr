@@ -1,6 +1,9 @@
 import time
 from typing import Dict, List
 
+from ome_types import to_xml
+from ome_types.model import OME, Image, Pixels
+from ome_types.model.simple_types import ImageID, PixelsID, PixelType
 from omero.gateway import ImageWrapper
 from zarr.storage import FSStore
 
@@ -112,3 +115,30 @@ def marshal_transformations(
         zooms["y"] = zooms["y"] * multiscales_zoom
 
     return transformations
+
+
+def get_minimum_image_ome_xml(images: List[ImageWrapper]) -> str:
+    """Generates minimal OME.xml for"""
+
+    ome = OME()
+
+    for image in images:
+        pixels_id = image.getPixelsId()
+        pix = image.getPrimaryPixels()
+        pixels_type = image.getPrimaryPixels().getPixelsType().getValue()
+        ptype = PixelType(pixels_type)
+        pixels = Pixels(
+            id=PixelsID("Pixels:%s" % pixels_id),
+            dimension_order=pix.getDimensionOrder().getValue(),
+            size_c=image.getSizeC(),
+            size_t=image.getSizeT(),
+            size_z=image.getSizeZ(),
+            size_x=image.getSizeX(),
+            size_y=image.getSizeY(),
+            type=ptype,
+            metadata_only=True,
+        )
+        img = Image(id=ImageID("Image:%s" % image.id), pixels=pixels, name=image.name)
+        ome.images.append(img)
+
+    return to_xml(ome)
