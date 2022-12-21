@@ -447,8 +447,8 @@ class MaskSaver:
         self,
         masks: List[omero.model.Mask],
         mask_shape: Tuple[int, ...],
-        ignored_dimensions: Set[str] = None,
-        check_overlaps: bool = None,
+        ignored_dimensions: Optional[Set[str]] = None,
+        check_overlaps: Optional[bool] = None,
     ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks

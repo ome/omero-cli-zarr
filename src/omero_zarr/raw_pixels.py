@@ -117,7 +117,7 @@ def add_raw_image(
     parent: Group,
     level_count: int,
     cache_dir: Optional[str] = None,
-    cache_file_name_func: Callable[[int, int, int], str] = None,
+    cache_file_name_func: Optional[Callable[[int, int, int], str]] = None,
 ) -> List[str]:
     """Adds the raw image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
