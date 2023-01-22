@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
@@ -12,6 +13,7 @@ from ome_zarr.writer import (
     write_plate_metadata,
     write_well_metadata,
 )
+from omero.model import Channel
 from omero.rtypes import unwrap
 from skimage.transform import resize
 from zarr.hierarchy import Array, Group, open_group
@@ -54,27 +56,6 @@ def add_image(
     size_t = image.getSizeT()
     d_type = image.getPixelsType()
 
-    zct_list = []
-    for t in range(size_t):
-        for c in range(size_c):
-            for z in range(size_z):
-                if cache_dir is not None:
-                    # We only want to load from server if not cached locally
-                    filename = get_cache_filename(z, c, t)
-                    if not os.path.exists(filename):
-                        zct_list.append((z, c, t))
-                else:
-                    zct_list.append((z, c, t))
-
-    pixels = image.getPrimaryPixels()
-
-    def planeGen() -> np.ndarray:
-
-        planes = pixels.getPlanes(zct_list)
-        yield from planes
-
-    planes = planeGen()
-
     # Target size for smallest multiresolution
     TARGET_SIZE = 96
     level_count = 1
@@ -83,17 +64,43 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    paths = add_raw_image(
-        planes=planes,
-        size_z=size_z,
-        size_c=size_c,
-        size_t=size_t,
-        d_type=d_type,
-        parent=parent,
-        level_count=level_count,
-        cache_dir=cache_dir,
-        cache_file_name_func=get_cache_filename,
-    )
+    # if big image...
+    if size_x * size_y > 1000:
+        paths = add_big_image(image, parent, level_count)
+
+    else:
+        zct_list = []
+        for t in range(size_t):
+            for c in range(size_c):
+                for z in range(size_z):
+                    if cache_dir is not None:
+                        # We only want to load from server if not cached locally
+                        filename = get_cache_filename(z, c, t)
+                        if not os.path.exists(filename):
+                            zct_list.append((z, c, t))
+                    else:
+                        zct_list.append((z, c, t))
+
+        pixels = image.getPrimaryPixels()
+
+        def planeGen() -> np.ndarray:
+
+            planes = pixels.getPlanes(zct_list)
+            yield from planes
+
+        planes = planeGen()
+
+        paths = add_raw_image(
+            planes=planes,
+            size_z=size_z,
+            size_c=size_c,
+            size_t=size_t,
+            d_type=d_type,
+            parent=parent,
+            level_count=level_count,
+            cache_dir=cache_dir,
+            cache_file_name_func=get_cache_filename,
+        )
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -105,6 +112,72 @@ def add_image(
     write_multiscales_metadata(parent, datasets, axes=axes)
 
     return (level_count, axes)
+
+
+def add_big_image(
+    image: omero.gateway.ImageWrapper, parent: Group, level_count: int
+) -> List[str]:
+
+    pixels = image.getPrimaryPixels()
+    d_type = image.getPixelsType()
+    size_c = image.getSizeC()
+    size_z = image.getSizeZ()
+    size_x = image.getSizeX()
+    size_y = image.getSizeY()
+    size_t = image.getSizeT()
+
+    tile_size_x = 256
+    tile_size_y = 256
+
+    chunk_count_x = math.ceil(size_x / tile_size_x)
+    chunk_count_y = math.ceil(size_y / tile_size_y)
+
+    # create 0 array
+    path = "0"
+    dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
+    zarray = parent.create(
+        path,
+        shape=tuple(dims + [size_y, size_x]),
+        chunks=tuple([1] * len(dims) + [tile_size_y, tile_size_x]),
+        dtype=d_type,
+    )
+
+    for t in range(size_t):
+        for c in range(size_c):
+            for z in range(size_z):
+                for chk_x in range(chunk_count_x):
+                    for chk_y in range(chunk_count_y):
+                        print("t, c, z, chk_x, chk_y", t, c, z, chk_x, chk_y)
+                        x = tile_size_x * chk_x
+                        y = tile_size_y * chk_y
+
+                        y_max = min(size_y, y + tile_size_y)
+                        x_max = min(size_x, x + tile_size_x)
+
+                        tile_dims = (x, y, x_max - x, y_max - y)
+                        print("tile_dims", tile_dims)
+                        tile = pixels.getTile(z, c, t, tile_dims)
+                        print("tile", tile.shape)
+
+                        indices = []
+                        if size_t > 1:
+                            indices.append(t)
+                        if size_c > 1:
+                            indices.append(c)
+                        if size_z > 1:
+                            indices.append(z)
+
+                        indices.append(np.s_[y:y_max:])
+                        indices.append(np.s_[x:x_max:])
+
+                        zarray[tuple(indices)] = tile
+
+    paths = [path]
+    for level in range(1, level_count):
+        # TODO: downsample
+        # paths.append(str(level))
+        pass
+    return paths
 
 
 def add_raw_image(
@@ -305,7 +378,7 @@ def add_toplevel_metadata(zarr_root: Group) -> None:
     zarr_root.attrs["_creator"] = {"name": "omero-zarr", "version": __version__}
 
 
-def channelMarshal(channel: omero.model.Channel) -> Dict[str, Any]:
+def channelMarshal(channel: Channel) -> Dict[str, Any]:
     return {
         "label": channel.getLabel(),
         "color": channel.getColor().getHtml(),
