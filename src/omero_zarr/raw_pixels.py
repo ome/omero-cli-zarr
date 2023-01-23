@@ -4,10 +4,12 @@ import os
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+import dask.array as da
 import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr.dask_utils import resize as da_resize
 from ome_zarr.writer import (
     write_multiscales_metadata,
     write_plate_metadata,
@@ -65,7 +67,7 @@ def add_image(
         level_count += 1
 
     # if big image...
-    if size_x * size_y > 1000:
+    if image.requiresPixelsPyramid():
         paths = add_big_image(image, parent, level_count)
 
     else:
@@ -126,8 +128,8 @@ def add_big_image(
     size_y = image.getSizeY()
     size_t = image.getSizeT()
 
-    tile_size_x = 256
-    tile_size_y = 256
+    tile_size_x = 512
+    tile_size_y = 512
 
     chunk_count_x = math.ceil(size_x / tile_size_x)
     chunk_count_y = math.ceil(size_y / tile_size_y)
@@ -155,9 +157,7 @@ def add_big_image(
                         x_max = min(size_x, x + tile_size_x)
 
                         tile_dims = (x, y, x_max - x, y_max - y)
-                        print("tile_dims", tile_dims)
                         tile = pixels.getTile(z, c, t, tile_dims)
-                        print("tile", tile.shape)
 
                         indices = []
                         if size_t > 1:
@@ -173,10 +173,31 @@ def add_big_image(
                         zarray[tuple(indices)] = tile
 
     paths = [path]
+    image_path = parent.store.path
+
     for level in range(1, level_count):
-        # TODO: downsample
-        # paths.append(str(level))
-        pass
+        # create a pyramid, level "1" and smaller....
+        path = str(level)
+        paths.append(path)
+
+        # open previous resolution from disk via dask...
+        path_to_array = os.path.join(image_path, str(level - 1))
+        print("reading from path_to_array", path_to_array)
+        dask_image = da.from_zarr(path_to_array)
+        print("dask_image", dask_image)
+
+        # resize in X and Y
+        dims = list(dask_image.shape)
+        dims[-1] = dims[-1] // 2
+        dims[-2] = dims[-2] // 2
+        output = da_resize(
+            dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
+        )
+        print("output", output)
+
+        # da.to_zarr(output, os.path.join(image_path, path))   # but with separator /
+        da.to_zarr(arr=output, url=parent.store, component=path)
+
     return paths
 
 
