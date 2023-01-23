@@ -69,7 +69,6 @@ def add_image(
     # if big image...
     if image.requiresPixelsPyramid():
         paths = add_big_image(image, parent, level_count)
-
     else:
         zct_list = []
         for t in range(size_t):
@@ -172,19 +171,22 @@ def add_big_image(
 
                         zarray[tuple(indices)] = tile
 
-    paths = [path]
+    paths = [str(level) for level in range(level_count)]
+
+    downsample_pyramid_on_disk(parent, paths)
+    return paths
+
+
+def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
+    """
+    Takes a high-resolution Zarr array at paths[0] in the zarr group
+    and down-samples it by a factor of 2 for each of the other paths
+    """
     image_path = parent.store.path
-
-    for level in range(1, level_count):
-        # create a pyramid, level "1" and smaller....
-        path = str(level)
-        paths.append(path)
-
+    for count, path in enumerate(paths[1:]):
         # open previous resolution from disk via dask...
-        path_to_array = os.path.join(image_path, str(level - 1))
-        print("reading from path_to_array", path_to_array)
+        path_to_array = os.path.join(image_path, paths[count])
         dask_image = da.from_zarr(path_to_array)
-        print("dask_image", dask_image)
 
         # resize in X and Y
         dims = list(dask_image.shape)
@@ -193,9 +195,8 @@ def add_big_image(
         output = da_resize(
             dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
         )
-        print("output", output)
 
-        # da.to_zarr(output, os.path.join(image_path, path))   # but with separator /
+        # write to disk
         da.to_zarr(arr=output, url=parent.store, component=path)
 
     return paths
