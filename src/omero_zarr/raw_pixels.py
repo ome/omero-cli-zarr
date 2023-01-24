@@ -2,7 +2,7 @@ import argparse
 import math
 import os
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import dask.array as da
 import numpy
@@ -17,8 +17,7 @@ from ome_zarr.writer import (
 )
 from omero.model import Channel
 from omero.rtypes import unwrap
-from skimage.transform import resize
-from zarr.hierarchy import Array, Group, open_group
+from zarr.hierarchy import Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
@@ -47,16 +46,13 @@ def add_image(
     Returns the number of resolution levels generated for the image.
     """
 
-    def get_cache_filename(z: int, c: int, t: int) -> str:
+    def get_cache_filename(*args: Any) -> str:
         assert cache_dir is not None
-        return os.path.join(cache_dir, str(image.id), f"{z:03d}-{c:03d}-{t:03d}.npy")
+        dims = ["%03d" % dim for dim in args]
+        return os.path.join(cache_dir, str(image.id), f"{'-'.join(dims)}.npy")
 
-    size_c = image.getSizeC()
-    size_z = image.getSizeZ()
     size_x = image.getSizeX()
     size_y = image.getSizeY()
-    size_t = image.getSizeT()
-    d_type = image.getPixelsType()
 
     # Target size for smallest multiresolution
     TARGET_SIZE = 96
@@ -66,42 +62,13 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    # if big image...
-    if image.requiresPixelsPyramid():
-        paths = add_big_image(image, parent, level_count)
-    else:
-        zct_list = []
-        for t in range(size_t):
-            for c in range(size_c):
-                for z in range(size_z):
-                    if cache_dir is not None:
-                        # We only want to load from server if not cached locally
-                        filename = get_cache_filename(z, c, t)
-                        if not os.path.exists(filename):
-                            zct_list.append((z, c, t))
-                    else:
-                        zct_list.append((z, c, t))
+    kwargs = {}
+    if cache_dir is not None:
+        kwargs["cache_file_name_func"] = get_cache_filename
 
-        pixels = image.getPrimaryPixels()
-
-        def planeGen() -> np.ndarray:
-
-            planes = pixels.getPlanes(zct_list)
-            yield from planes
-
-        planes = planeGen()
-
-        paths = add_raw_image(
-            planes=planes,
-            size_z=size_z,
-            size_c=size_c,
-            size_t=size_t,
-            d_type=d_type,
-            parent=parent,
-            level_count=level_count,
-            cache_dir=cache_dir,
-            cache_file_name_func=get_cache_filename,
-        )
+    paths = add_raw_image(
+        image, parent, level_count, cache_file_name_func=get_cache_filename
+    )
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -115,8 +82,11 @@ def add_image(
     return (level_count, axes)
 
 
-def add_big_image(
-    image: omero.gateway.ImageWrapper, parent: Group, level_count: int
+def add_raw_image(
+    image: omero.gateway.ImageWrapper,
+    parent: Group,
+    level_count: int,
+    cache_file_name_func: Optional[Callable[..., str]] = None,
 ) -> List[str]:
 
     pixels = image.getPrimaryPixels()
@@ -127,8 +97,14 @@ def add_big_image(
     size_y = image.getSizeY()
     size_t = image.getSizeT()
 
-    tile_size_x = 512
-    tile_size_y = 512
+    rps = pixels._prepareRawPixelsStore()
+    tile_size_x, tile_size_y = rps.getTileSize()
+
+    print(
+        "sizes x: %s, y: %s, z: %s, c: %s, t: %s"
+        % (size_x, size_y, size_z, size_c, size_t)
+    )
+    print(f"tile_size_x: {tile_size_x}, tile_size_y: {tile_size_y}")
 
     chunk_count_x = math.ceil(size_x / tile_size_x)
     chunk_count_y = math.ceil(size_y / tile_size_y)
@@ -156,7 +132,21 @@ def add_big_image(
                         x_max = min(size_x, x + tile_size_x)
 
                         tile_dims = (x, y, x_max - x, y_max - y)
-                        tile = pixels.getTile(z, c, t, tile_dims)
+
+                        if cache_file_name_func:
+                            filename = cache_file_name_func(t, c, z, chk_y, chk_x)
+                            if os.path.exists(filename):
+                                print("Reading from cache: %s" % filename)
+                                tile = numpy.load(filename)
+                            else:
+                                tile = pixels.getTile(z, c, t, tile_dims)
+                                os.makedirs(
+                                    os.path.dirname(filename), mode=511, exist_ok=True
+                                )
+                                print("Writing to cache: %s" % filename)
+                                numpy.save(filename, tile)
+                        else:
+                            tile = pixels.getTile(z, c, t, tile_dims)
 
                         indices = []
                         if size_t > 1:
@@ -198,93 +188,6 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
 
         # write to disk
         da.to_zarr(arr=output, url=parent.store, component=path)
-
-    return paths
-
-
-def add_raw_image(
-    *,
-    planes: Iterator[np.ndarray],
-    size_z: int,
-    size_c: int,
-    size_t: int,
-    d_type: np.dtype,
-    parent: Group,
-    level_count: int,
-    cache_dir: Optional[str] = None,
-    cache_file_name_func: Optional[Callable[[int, int, int], str]] = None,
-) -> List[str]:
-    """Adds the raw image pixel data as array to the given parent zarr group.
-    Optionally caches the pixel data in the given cache_dir directory.
-    Returns the number of resolution levels generated for the image.
-
-    planes: Generator returning planes in order of zct (whatever order
-            OMERO returns in its plane generator). Each plane must be a
-            numpy array with shape (size_y, sizex), or None to skip the
-            plane.
-    """
-
-    if cache_dir is not None:
-        cache = True
-    else:
-        cache = False
-        cache_dir = ""
-
-    dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
-
-    paths: List[str] = []
-    field_groups: List[Array] = []
-    for t in range(size_t):
-        for c in range(size_c):
-            for z in range(size_z):
-                if cache:
-                    assert cache_file_name_func
-                    filename = cache_file_name_func(z, c, t)
-                    if os.path.exists(filename):
-                        plane = numpy.load(filename)
-                    else:
-                        plane = next(planes)
-                        os.makedirs(os.path.dirname(filename), mode=511, exist_ok=True)
-                        numpy.save(filename, plane)
-                else:
-                    plane = next(planes)
-                if plane is None:
-                    continue
-                for level in range(level_count):
-                    size_y = plane.shape[0]
-                    size_x = plane.shape[1]
-                    # If on first plane, create a new group for this resolution level
-                    if len(field_groups) <= level:
-                        path = str(level)
-                        paths.append(path)
-                        field_groups.append(
-                            parent.create(
-                                path,
-                                shape=tuple(dims + [size_y, size_x]),
-                                chunks=tuple([1] * len(dims) + [size_y, size_x]),
-                                dtype=d_type,
-                            )
-                        )
-
-                    indices = []
-                    if size_t > 1:
-                        indices.append(t)
-                    if size_c > 1:
-                        indices.append(c)
-                    if size_z > 1:
-                        indices.append(z)
-
-                    field_groups[level][tuple(indices)] = plane
-
-                    if (level + 1) < level_count:
-                        # resize for next level...
-                        plane = resize(
-                            plane,
-                            output_shape=(size_y // 2, size_x // 2),
-                            order=0,
-                            preserve_range=True,
-                            anti_aliasing=False,
-                        ).astype(plane.dtype)
 
     return paths
 
