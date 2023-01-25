@@ -95,17 +95,15 @@ def add_raw_image(
     size_y = image.getSizeY()
     size_t = image.getSizeT()
 
-    rps = pixels._prepareRawPixelsStore()
-    tile_size_x, tile_size_y = rps.getTileSize()
+    tile_size = 512
 
     print(
         "sizes x: %s, y: %s, z: %s, c: %s, t: %s"
         % (size_x, size_y, size_z, size_c, size_t)
     )
-    print(f"tile_size_x: {tile_size_x}, tile_size_y: {tile_size_y}")
 
-    chunk_count_x = math.ceil(size_x / tile_size_x)
-    chunk_count_y = math.ceil(size_y / tile_size_y)
+    chunk_count_x = math.ceil(size_x / tile_size)
+    chunk_count_y = math.ceil(size_y / tile_size)
 
     # create 0 array
     path = "0"
@@ -113,7 +111,7 @@ def add_raw_image(
     zarray = parent.create(
         path,
         shape=tuple(dims + [size_y, size_x]),
-        chunks=tuple([1] * len(dims) + [tile_size_y, tile_size_x]),
+        chunks=tuple([1] * len(dims) + [tile_size, tile_size]),
         dtype=d_type,
     )
 
@@ -123,11 +121,11 @@ def add_raw_image(
                 for chk_x in range(chunk_count_x):
                     for chk_y in range(chunk_count_y):
                         print("t, c, z, chk_x, chk_y", t, c, z, chk_x, chk_y)
-                        x = tile_size_x * chk_x
-                        y = tile_size_y * chk_y
+                        x = tile_size * chk_x
+                        y = tile_size * chk_y
 
-                        y_max = min(size_y, y + tile_size_y)
-                        x_max = min(size_x, x + tile_size_x)
+                        y_max = min(size_y, y + tile_size)
+                        x_max = min(size_x, x + tile_size)
 
                         tile_dims = (x, y, x_max - x, y_max - y)
 
