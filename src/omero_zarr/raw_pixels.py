@@ -118,9 +118,9 @@ def add_raw_image(
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):
-                for chk_x in range(chunk_count_x):
-                    for chk_y in range(chunk_count_y):
-                        print("t, c, z, chk_x, chk_y", t, c, z, chk_x, chk_y)
+                for chk_y in range(chunk_count_y):
+                    for chk_x in range(chunk_count_x):
+                        print("t, c, z, chk_x, chk_y", t, c, z, chk_y, chk_x)
                         x = tile_size * chk_x
                         y = tile_size * chk_y
 
