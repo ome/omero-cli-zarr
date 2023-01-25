@@ -66,9 +66,7 @@ def add_image(
     if cache_dir is not None:
         kwargs["cache_file_name_func"] = get_cache_filename
 
-    paths = add_raw_image(
-        image, parent, level_count, cache_file_name_func=get_cache_filename
-    )
+    paths = add_raw_image(image, parent, level_count, **kwargs)
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
