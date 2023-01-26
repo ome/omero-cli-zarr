@@ -27,19 +27,27 @@ from .util import marshal_axes, marshal_transformations, open_store, print_statu
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
     cache_dir = target_dir if args.cache_numpy else None
+    tile_width = args.tile_width
+    tile_height = args.tile_height
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    add_image(image, root, cache_dir=cache_dir)
+    add_image(
+        image, root, cache_dir=cache_dir, tile_width=tile_width, tile_height=tile_height
+    )
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
 
 
 def add_image(
-    image: omero.gateway.ImageWrapper, parent: Group, cache_dir: Optional[str] = None
+    image: omero.gateway.ImageWrapper,
+    parent: Group,
+    cache_dir: Optional[str] = None,
+    tile_width: Optional[int] = None,
+    tile_height: Optional[int] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Optionally caches the pixel data in the given cache_dir directory.
@@ -62,11 +70,13 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    kwargs = {}
+    cache_func = None
     if cache_dir is not None:
-        kwargs["cache_file_name_func"] = get_cache_filename
+        cache_func = get_cache_filename
 
-    paths = add_raw_image(image, parent, level_count, **kwargs)
+    paths = add_raw_image(
+        image, parent, level_count, cache_func, tile_width, tile_height
+    )
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -85,6 +95,8 @@ def add_raw_image(
     parent: Group,
     level_count: int,
     cache_file_name_func: Optional[Callable[..., str]] = None,
+    tile_width: Optional[int] = None,
+    tile_height: Optional[int] = None,
 ) -> List[str]:
 
     pixels = image.getPrimaryPixels()
@@ -95,15 +107,21 @@ def add_raw_image(
     size_y = image.getSizeY()
     size_t = image.getSizeT()
 
-    tile_size = 512
+    if tile_width is None:
+        tile_width = 1024
+    if tile_height is None:
+        tile_height = 1024
+    tile_width = int(tile_width)
+    tile_height = int(tile_height)
 
     print(
         "sizes x: %s, y: %s, z: %s, c: %s, t: %s"
         % (size_x, size_y, size_z, size_c, size_t)
     )
+    print(f"tile_width: {tile_width}, tile_height: {tile_height}")
 
-    chunk_count_x = math.ceil(size_x / tile_size)
-    chunk_count_y = math.ceil(size_y / tile_size)
+    chunk_count_x = math.ceil(size_x / tile_width)
+    chunk_count_y = math.ceil(size_y / tile_height)
 
     # create 0 array
     path = "0"
@@ -111,7 +129,7 @@ def add_raw_image(
     zarray = parent.create(
         path,
         shape=tuple(dims + [size_y, size_x]),
-        chunks=tuple([1] * len(dims) + [tile_size, tile_size]),
+        chunks=tuple([1] * len(dims) + [tile_height, tile_width]),
         dtype=d_type,
     )
 
@@ -121,11 +139,11 @@ def add_raw_image(
                 for chk_y in range(chunk_count_y):
                     for chk_x in range(chunk_count_x):
                         print("t, c, z, chk_x, chk_y", t, c, z, chk_y, chk_x)
-                        x = tile_size * chk_x
-                        y = tile_size * chk_y
+                        x = tile_width * chk_x
+                        y = tile_height * chk_y
 
-                        y_max = min(size_y, y + tile_size)
-                        x_max = min(size_x, x + tile_size)
+                        y_max = min(size_y, y + tile_height)
+                        x_max = min(size_x, x + tile_width)
 
                         tile_dims = (x, y, x_max - x, y_max - y)
 

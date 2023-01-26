@@ -68,7 +68,7 @@ bioformats2raw options
 
   --tile_width / --tile_height
 
-     Maximum tile width or height to read (only for use with bioformats2raw)
+     Maximum tile width or height to read
 
   --resolutions
 
@@ -249,12 +249,12 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--tile_width",
             default=None,
-            help="Maximum tile width to read (only for use with bioformats2raw)",
+            help="Maximum tile width",
         )
         export.add_argument(
             "--tile_height",
             default=None,
-            help="Maximum tile height to read (only for use with bioformats2raw)",
+            help="Maximum tile height",
         )
         export.add_argument(
             "--resolutions",
