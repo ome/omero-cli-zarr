@@ -57,7 +57,8 @@ def add_image(
     def get_cache_filename(*args: Any) -> str:
         assert cache_dir is not None
         dims = ["%03d" % dim for dim in args]
-        return os.path.join(cache_dir, str(image.id), f"{'-'.join(dims)}.npy")
+        pathname = os.path.join(cache_dir, str(image.id), *dims)
+        return pathname + ".npy"
 
     size_x = image.getSizeX()
     size_y = image.getSizeY()
