@@ -46,13 +46,12 @@ To export Images or Plates via the OMERO API::
     # Specify an output directory
     $ omero zarr --output /home/user/zarr_files export Image:1
 
-    # Cache each plane as a numpy file.npy. If connection is lost, and you need
-    # to export again, we can use these instead of downloading again
-    $ omero zarr --cache_numpy export Image:1
-
     # By default, a tile size of 1024 is used. Specify values with
     $ omero zarr export Image:1 --tile_width 256 --tile_height 256
 
+
+NB: If the connection to OMERO is lost and the Image is partially exported,
+re-running the command will attempt to complete the export.
 
 To export images via bioformats2raw we use the ```--bf``` flag::
 

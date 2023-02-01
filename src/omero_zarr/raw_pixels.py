@@ -2,7 +2,7 @@ import argparse
 import math
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import dask.array as da
 import numpy
@@ -26,7 +26,6 @@ from .util import marshal_axes, marshal_transformations, open_store, print_statu
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
-    cache_dir = target_dir if args.cache_numpy else None
     tile_width = args.tile_width
     tile_height = args.tile_height
 
@@ -34,9 +33,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    add_image(
-        image, root, cache_dir=cache_dir, tile_width=tile_width, tile_height=tile_height
-    )
+    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -45,20 +42,12 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
 def add_image(
     image: omero.gateway.ImageWrapper,
     parent: Group,
-    cache_dir: Optional[str] = None,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
-    Optionally caches the pixel data in the given cache_dir directory.
     Returns the number of resolution levels generated for the image.
     """
-
-    def get_cache_filename(*args: Any) -> str:
-        assert cache_dir is not None
-        dims = ["%03d" % dim for dim in args]
-        pathname = os.path.join(cache_dir, str(image.id), *dims)
-        return pathname + ".npy"
 
     size_x = image.getSizeX()
     size_y = image.getSizeY()
@@ -71,13 +60,7 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    cache_func = None
-    if cache_dir is not None:
-        cache_func = get_cache_filename
-
-    paths = add_raw_image(
-        image, parent, level_count, cache_func, tile_width, tile_height
-    )
+    paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -95,7 +78,6 @@ def add_raw_image(
     image: omero.gateway.ImageWrapper,
     parent: Group,
     level_count: int,
-    cache_file_name_func: Optional[Callable[..., str]] = None,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
 ) -> List[str]:
@@ -124,15 +106,22 @@ def add_raw_image(
     chunk_count_x = math.ceil(size_x / tile_width)
     chunk_count_y = math.ceil(size_y / tile_height)
 
-    # create 0 array
+    # create "0" array if it doesn't exist
     path = "0"
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
-    zarray = parent.create(
+    shape = tuple(dims + [size_y, size_x])
+    chunks = tuple([1] * len(dims) + [tile_height, tile_width])
+    zarray = parent.require_dataset(
         path,
-        shape=tuple(dims + [size_y, size_x]),
-        chunks=tuple([1] * len(dims) + [tile_height, tile_width]),
+        shape=shape,
+        exact=True,
+        chunks=chunks,
         dtype=d_type,
     )
+    # Need to be sure that dims match (if array already existed)
+    assert zarray.shape == shape
+    msg = f"Chunks mismatch: existing {zarray.chunks} requested {chunks}"
+    assert zarray.chunks == chunks, msg
 
     for t in range(size_t):
         for c in range(size_c):
@@ -148,21 +137,6 @@ def add_raw_image(
 
                         tile_dims = (x, y, x_max - x, y_max - y)
 
-                        if cache_file_name_func:
-                            filename = cache_file_name_func(t, c, z, chk_y, chk_x)
-                            if os.path.exists(filename):
-                                print("Reading from cache: %s" % filename)
-                                tile = numpy.load(filename)
-                            else:
-                                tile = pixels.getTile(z, c, t, tile_dims)
-                                os.makedirs(
-                                    os.path.dirname(filename), mode=511, exist_ok=True
-                                )
-                                print("Writing to cache: %s" % filename)
-                                numpy.save(filename, tile)
-                        else:
-                            tile = pixels.getTile(z, c, t, tile_dims)
-
                         indices = []
                         if size_t > 1:
                             indices.append(t)
@@ -174,7 +148,13 @@ def add_raw_image(
                         indices.append(np.s_[y:y_max:])
                         indices.append(np.s_[x:x_max:])
 
-                        zarray[tuple(indices)] = tile
+                        existing_data = zarray[tuple(indices)]
+                        print("existing_data.max", existing_data.max())
+
+                        if existing_data.max() == 0:
+                            print("loading Tile...")
+                            tile = pixels.getTile(z, c, t, tile_dims)
+                            zarray[tuple(indices)] = tile
 
     paths = [str(level) for level in range(level_count)]
 
@@ -235,7 +215,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
 
     target_dir = args.output
-    cache_dir = target_dir if args.cache_numpy else None
     name = os.path.join(target_dir, "%s.zarr" % plate.id)
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
@@ -275,7 +254,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                add_image(img, field_group, cache_dir=cache_dir)
+                add_image(img, field_group)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
                 write_well_metadata(col_group, fields)

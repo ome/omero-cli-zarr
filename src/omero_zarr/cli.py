@@ -126,12 +126,6 @@ class ZarrControl(BaseControl):
             "--output", type=str, default="", help="The output directory"
         )
 
-        parser.add_argument(
-            "--cache_numpy",
-            action="store_true",
-            help="Save planes as .npy files in case of connection loss",
-        )
-
         # Subcommands
         sub = parser.sub()
         polygons = parser.add(sub, self.polygons, POLYGONS_HELP)
