@@ -5,7 +5,6 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import dask.array as da
-import numpy
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
@@ -170,8 +169,14 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
     Takes a high-resolution Zarr array at paths[0] in the zarr group
     and down-samples it by a factor of 2 for each of the other paths
     """
-    image_path = parent.store.path
+    group_path = parent.store.path
+    image_path = os.path.join(group_path, parent.path)
+    print("downsample_pyramid_on_disk", image_path)
     for count, path in enumerate(paths[1:]):
+        target_path = os.path.join(image_path, path)
+        if os.path.exists(target_path):
+            print("path exists: %s" % target_path)
+            continue
         # open previous resolution from disk via dask...
         path_to_array = os.path.join(image_path, paths[count])
         dask_image = da.from_zarr(path_to_array)
@@ -185,7 +190,7 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
         )
 
         # write to disk
-        da.to_zarr(arr=output, url=parent.store, component=path)
+        da.to_zarr(arr=output, url=image_path, component=path)
 
     return paths
 
