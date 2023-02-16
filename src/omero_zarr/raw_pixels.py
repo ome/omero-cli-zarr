@@ -243,7 +243,11 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     if acquisitions:
         plate_acq = [marshal_acquisition(x) for x in acquisitions]
 
-    for well in plate.listChildren():
+    wells = plate.listChildren()
+    # sort by row then column...
+    wells = sorted(wells, key=lambda x: (x.row * 100 + x.column))
+
+    for well in wells:
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
         fields = []
