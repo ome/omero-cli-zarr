@@ -118,8 +118,6 @@ def add_raw_image(
         chunks=chunks,
         dtype=d_type,
     )
-    chunk_keys = list(zarray.chunk_store.keys())
-    separator = zarray.chunk_store.key_separator
 
     # Need to be sure that dims match (if array already existed)
     assert zarray.shape == shape
@@ -131,7 +129,10 @@ def add_raw_image(
             for z in range(size_z):
                 for chk_y in range(chunk_count_y):
                     for chk_x in range(chunk_count_x):
-                        print("t, c, z, chk_x, chk_y", t, c, z, chk_y, chk_x)
+                        print(
+                            "t, c, z, chk_x, chk_y %s %s %s %s %s"
+                            % (t, c, z, chk_y, chk_x)
+                        )
                         x = tile_width * chk_x
                         y = tile_height * chk_y
 
@@ -152,9 +153,8 @@ def add_raw_image(
                         indices.append(np.s_[x:x_max:])
 
                         # Check if chunk exists. If not load from OMERO
-                        key_dims = [path, *indices[:-2], chk_y, chk_x]
-                        chunk_key = separator.join([str(k) for k in key_dims])
-                        if chunk_key not in chunk_keys:
+                        existing_data = zarray[tuple(indices)]
+                        if existing_data.max() == 0:
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
                             zarray[tuple(indices)] = tile
