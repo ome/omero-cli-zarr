@@ -245,7 +245,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     wells = plate.listChildren()
     # sort by row then column...
-    wells = sorted(wells, key=lambda x: (x.row * 100 + x.column))
+    wells = sorted(wells, key=lambda x: (x.row, x.column))
 
     for well in wells:
         row = plate.getRowLabels()[well.row]
