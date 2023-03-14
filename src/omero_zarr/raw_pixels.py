@@ -80,7 +80,6 @@ def add_raw_image(
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
 ) -> List[str]:
-
     pixels = image.getPrimaryPixels()
     d_type = image.getPixelsType()
     size_c = image.getSizeC()
@@ -289,7 +288,6 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
-
     image_data = {
         "id": 1,
         "channels": [channelMarshal(c) for c in image.getChannels()],
@@ -305,7 +303,6 @@ def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> N
 
 
 def add_toplevel_metadata(zarr_root: Group) -> None:
-
     zarr_root.attrs["_creator"] = {"name": "omero-zarr", "version": __version__}
 
 

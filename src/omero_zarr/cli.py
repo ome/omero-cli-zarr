@@ -115,7 +115,6 @@ def gateway_required(func: Callable) -> Callable:
 
 
 class ZarrControl(BaseControl):
-
     gateway = None
     client = None
 

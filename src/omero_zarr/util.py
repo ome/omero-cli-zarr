@@ -38,7 +38,6 @@ def open_store(name: str) -> FSStore:
 
 
 def marshal_pixel_sizes(image: ImageWrapper) -> Dict[str, Dict]:
-
     pixel_sizes: Dict[str, Dict] = {}
     pix_size_x = image.getPixelSizeX(units=True)
     pix_size_y = image.getPixelSizeY(units=True)
@@ -90,7 +89,6 @@ def marshal_axes(image: ImageWrapper) -> List[Dict]:
 def marshal_transformations(
     image: ImageWrapper, levels: int = 1, multiscales_zoom: float = 2.0
 ) -> List[List[Dict]]:
-
     axes = marshal_axes(image)
     pixel_sizes = marshal_pixel_sizes(image)
 
