@@ -99,7 +99,7 @@ def plate_shapes_to_zarr(
 def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
     label_map = defaultdict(list)
     roi_map = {}
-    for (roi_id, roi) in masks.items():
+    for roi_id, roi in masks.items():
         roi_map[roi_id] = roi
 
     try:
@@ -115,7 +115,6 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
 
 
 def get_shapes(image: omero.gateway.ImageWrapper, shape_types: List[str]) -> Dict:
-
     shape_classes = []
     for klass in shape_types:
         if klass in SHAPE_TYPES:
@@ -170,7 +169,7 @@ def image_shapes_to_zarr(
         )
 
         if args.style == "split":
-            for (roi_id, roi) in masks.items():
+            for roi_id, roi in masks.items():
                 saver.save([roi], str(roi_id))
         else:
             if args.label_map:
@@ -403,7 +402,6 @@ class MaskSaver:
     def _polygon_to_binim_yx(
         self, polygon: omero.model.Shape
     ) -> Tuple[np.ndarray, Tuple[int, ...]]:
-
         t = unwrap(polygon.theT)
         c = unwrap(polygon.theC)
         z = unwrap(polygon.theZ)
