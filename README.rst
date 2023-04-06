@@ -111,3 +111,14 @@ This creates a file `5514375.rois` like this::
 This will create zarr groups of `Cell` and `Chromosomes` under `5514375.zarr/labels/`::
 
     $ omero zarr masks Image:5514375 --label-map=5514375.rois
+
+License
+-------
+
+This project, similar to many Open Microscopy Environment (OME) projects, is
+licensed under the terms of the GNU General Public License (GPL) v2 or later.
+
+Copyright
+---------
+
+2020-2023, The Open Microscopy Environment
