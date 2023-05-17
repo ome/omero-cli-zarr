@@ -51,7 +51,7 @@ DIMENSION_ORDER: Dict[str, int] = {
 }
 
 MASK_DTYPE_SIZE: Dict[int, np.dtype] = {
-    1: np.bool,
+    1: bool,
     8: np.int8,
     16: np.int16,
     32: np.int32,
@@ -550,7 +550,7 @@ class MaskSaver:
                         ):
                             overlap = np.logical_and(
                                 labels[i_t, i_c, i_z, y : (y + h), x : (x + w)].astype(
-                                    np.bool
+                                    bool
                                 ),
                                 binim_yx,
                             )
