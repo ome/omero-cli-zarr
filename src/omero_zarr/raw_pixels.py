@@ -207,7 +207,12 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
         )
 
         # write to disk
-        da.to_zarr(arr=output, url=image_path, component=path)
+        da.to_zarr(
+            arr=output,
+            url=parent.store,
+            component=str(path),
+            dimension_separator=parent._store._dimension_separator,
+        )
 
     return paths
 
