@@ -45,8 +45,12 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     target_dir = args.output
     tile_width = args.tile_width
     tile_height = args.tile_height
+    name_by = args.name_by
 
-    name = os.path.join(target_dir, "%s.zarr" % image.id)
+    if name_by == "name":
+        name = os.path.join(target_dir, "%s.ome.zarr" % image.name)
+    else:
+        name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
@@ -245,7 +249,13 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
 
     target_dir = args.output
-    name = os.path.join(target_dir, "%s.zarr" % plate.id)
+    name_by = args.name_by
+
+    if name_by == "name":
+        name = os.path.join(target_dir, "%s.ome.zarr" % plate.name)
+    else:
+        name = os.path.join(target_dir, "%s.zarr" % plate.id)
+
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
     root = open_group(store)

@@ -279,6 +279,15 @@ class ZarrControl(BaseControl):
             help="Maximum number of workers (only for use with bioformats2raw)",
         )
         export.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How to name the Image or Plate zarr. Default 'id' is [ID].zarr. "
+                "'name' is [NAME].ome.zarr"
+            ),
+        )
+        export.add_argument(
             "object",
             type=ProxyStringType("Image"),
             help="The Image to export.",
