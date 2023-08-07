@@ -308,6 +308,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
+        if len(well_paths) == 0:
+            continue
         write_plate_metadata(
             root,
             row_names,
