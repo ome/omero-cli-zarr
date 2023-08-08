@@ -48,9 +48,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     name_by = args.name_by
 
     if name_by == "name":
-        # remove .pattern from name, add .ome.zarr
-        img_name = image.name.replace(".pattern", "")
-        name = os.path.join(target_dir, "%s.ome.zarr" % img_name)
+        name = os.path.join(target_dir, "%s.ome.zarr" % image.name)
     else:
         name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
