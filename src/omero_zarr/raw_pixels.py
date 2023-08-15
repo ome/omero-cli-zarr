@@ -41,6 +41,12 @@ from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 
+def sanitize_name(zarr_name: str) -> str:
+    # Avoids re.compile errors when writing Zarr data with the named root
+    # https://github.com/ome/omero-cli-zarr/pull/147#issuecomment-1669075660
+    return zarr_name.replace("[", "(").replace("]", ")")
+
+
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     target_dir = args.output
     tile_width = args.tile_width
@@ -48,7 +54,8 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     name_by = args.name_by
 
     if name_by == "name":
-        name = os.path.join(target_dir, "%s.ome.zarr" % image.name)
+        img_name = sanitize_name(image.name)
+        name = os.path.join(target_dir, "%s.ome.zarr" % img_name)
     else:
         name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
@@ -252,7 +259,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     name_by = args.name_by
 
     if name_by == "name":
-        name = os.path.join(target_dir, "%s.ome.zarr" % plate.name)
+        plate_name = sanitize_name(plate.name)
+        name = os.path.join(target_dir, "%s.ome.zarr" % plate_name)
     else:
         name = os.path.join(target_dir, "%s.zarr" % plate.id)
 
