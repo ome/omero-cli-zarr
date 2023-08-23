@@ -289,9 +289,9 @@ class MaskSaver:
                 ignored_dimensions.add(d)
 
         if self.plate:
-            filename = f"{self.plate.id}.zarr"
+            filename = f"{self.plate.id}.ome.zarr"
         else:
-            filename = f"{self.image.id}.zarr"
+            filename = f"{self.image.id}.ome.zarr"
 
         # Verify that we are linking this mask to a real ome-zarr
         source_image = self.source_image
