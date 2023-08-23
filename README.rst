@@ -12,7 +12,7 @@ from OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md
 as well as Masks associated with Images.
 
-Images are 5D arrays of shape `(t, c, z, y, x)`.
+Images are nD arrays of shape, up to `(t, c, z, y, x)`.
 Plates are a hierarchy of `plate/row/column/field(image)`.
 Masks are 2D bitmasks which can exist on muliplte planes of an Image.
 In `ome-zarr` sets of Masks are collected together into "labels".
@@ -20,8 +20,7 @@ In `ome-zarr` sets of Masks are collected together into "labels".
 It supports export using 2 alternative methods:
 
 - By default the OMERO API is used to load planes as numpy arrays
-  and the zarr file is created from this data. NB: currently, large
-  tiled images are not supported by this method.
+  and the zarr file is created from this data.
 
 - Alternatively, if you can read directly from the OMERO binary
   repository and have installed https://github.com/glencoesoftware/bioformats2raw
@@ -37,16 +36,19 @@ Images and Plates
 To export Images or Plates via the OMERO API::
 
 
-    # Image will be saved in current directory as 1.zarr
+    # Image will be saved in current directory as 1.ome.zarr
     $ omero zarr export Image:1
 
-    # Plate will be saved in current directory as 2.zarr
+    # Plate will be saved in current directory as 2.ome.zarr
     $ omero zarr export Plate:2
+
+    # Use the Image or Plate 'name' to save e.g. my_image.ome.zarr
+    $ omero zarr --name_by name export Image:1
 
     # Specify an output directory
     $ omero zarr --output /home/user/zarr_files export Image:1
 
-    # By default, a tile size of 1024 is used. Specify values with
+    # By default, a tile (chunk) size of 1024 is used. Specify values with
     $ omero zarr export Image:1 --tile_width 256 --tile_height 256
 
 
