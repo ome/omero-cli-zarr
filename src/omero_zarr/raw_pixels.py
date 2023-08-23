@@ -47,17 +47,23 @@ def sanitize_name(zarr_name: str) -> str:
     return zarr_name.replace("[", "(").replace("]", ")")
 
 
-def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
+def get_zarr_name(
+    obj: omero.gateway.BlitzObjectWrapper, args: argparse.Namespace
+) -> str:
     target_dir = args.output
+    name_by = args.name_by
+    if name_by == "name":
+        obj_name = sanitize_name(obj.name)
+        name = os.path.join(target_dir, "%s.ome.zarr" % obj_name)
+    else:
+        name = os.path.join(target_dir, "%s.ome.zarr" % obj.id)
+    return name
+
+
+def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     tile_width = args.tile_width
     tile_height = args.tile_height
-    name_by = args.name_by
-
-    if name_by == "name":
-        img_name = sanitize_name(image.name)
-        name = os.path.join(target_dir, "%s.ome.zarr" % img_name)
-    else:
-        name = os.path.join(target_dir, "%s.zarr" % image.id)
+    name = get_zarr_name(image, args)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
@@ -254,15 +260,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_cols = gs["columns"]
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
-
-    target_dir = args.output
-    name_by = args.name_by
-
-    if name_by == "name":
-        plate_name = sanitize_name(plate.name)
-        name = os.path.join(target_dir, "%s.ome.zarr" % plate_name)
-    else:
-        name = os.path.join(target_dir, "%s.zarr" % plate.id)
+    name = get_zarr_name(plate, args)
 
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
