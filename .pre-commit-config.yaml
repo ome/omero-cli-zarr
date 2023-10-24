@@ -13,20 +13,20 @@ repos:
         args: ["--profile", "black"]
 
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 23.10.1
     hooks:
       - id: black
         args: [--target-version=py36]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.4.0
+    rev: v3.15.0
     hooks:
       - id: pyupgrade
         args:
           - --py36-plus
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.5.0
     hooks:
       - id: trailing-whitespace
         exclude: .bumpversion.cfg
@@ -45,7 +45,7 @@ repos:
           - --autofix
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
+    rev: 6.1.0
     hooks:
       - id: flake8
         additional_dependencies: [
@@ -63,14 +63,14 @@ repos:
         ]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.3.0
+    rev: v1.6.1
     hooks:
       - id: mypy
       # This is for checking tests/* (everything else has a stricter check
       # below), but since there's no include it's run on everything
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.3.0
+    rev: v1.6.1
     hooks:
       - id: mypy
         args: [
@@ -80,7 +80,7 @@ repos:
         exclude: tests/
 
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.31.0
+    rev: v1.32.0
     hooks:
       - id: yamllint
         # args: [--config-data=relaxed]
