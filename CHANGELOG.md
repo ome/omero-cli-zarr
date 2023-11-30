@@ -1,4 +1,9 @@
 
+# 0.5.4 (November 2023)
+
+- Fix path/to/image when exporting Plate images ([#146](https://github.com/ome/omero-cli-zarr/pull/146))
+
+
 # 0.5.3 (May 2023)
 
 - Fix dimension separator in downsampled data ([#144](https://github.com/ome/omero-cli-zarr/pull/144))
