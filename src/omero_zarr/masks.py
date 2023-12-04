@@ -21,7 +21,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from fileinput import input
+from fileinput import input as finput
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -121,7 +121,7 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
         roi_map[roi_id] = roi
 
     try:
-        for line in input(label_map_arg):
+        for line in finput(label_map_arg):
             line = line.strip()
             sid, name, roi = line.split(",")
             label_map[name].append(roi_map[int(roi)])
