@@ -67,7 +67,7 @@ repos:
     rev: v1.6.1
     hooks:
       - id: mypy
-        exclude: versioneer.py
+        exclude: ".*versioneer.*"
       # This is for checking tests/* (everything else has a stricter check
       # below), but since there's no include it's run on everything
 
@@ -75,11 +75,11 @@ repos:
     rev: v1.6.1
     hooks:
       - id: mypy
+        exclude: ".*versioneer.*"
         args: [
-          --disallow-untyped-defs,
-          --ignore-missing-imports,
+          "--disallow-untyped-defs",
+          "--ignore-missing-imports"
         ]
-        exclude: (versioneer.py|tests/)
 
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.32.0
