@@ -5,4 +5,3 @@ venv/
 build/
 dist/
 __pycache__
-src/omero_zarr/_version.py

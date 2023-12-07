@@ -20,6 +20,8 @@ import os
 
 from setuptools import setup
 
+import versioneer
+
 
 def get_long_description() -> str:
     here = os.path.abspath(os.path.dirname(__file__))
@@ -29,10 +31,12 @@ def get_long_description() -> str:
 
 
 long_description = get_long_description()
+version = versioneer.get_version()
 
 setup(
     name="omero-cli-zarr",
-    version="0.5.5.dev0",
+    version=version,
+    cmdclass=versioneer.get_cmdclass(),
     packages=["omero_zarr", "omero.plugins"],
     package_dir={"": "src"},
     description="Plugin for exporting images in zarr format.",
@@ -55,6 +59,4 @@ setup(
     long_description=long_description,
     keywords=["OMERO.CLI", "plugin"],
     url="https://github.com/ome/omero-cli-zarr/",
-    setup_requires=["setuptools_scm"],
-    use_scm_version={"write_to": "src/omero_zarr/_version.py"},
 )
