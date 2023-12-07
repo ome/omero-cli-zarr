@@ -29,7 +29,6 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-        exclude: .bumpversion.cfg
       - id: end-of-file-fixer
       - id: check-json
         files: \.(json)$
@@ -67,7 +66,7 @@ repos:
     rev: v1.6.1
     hooks:
       - id: mypy
-        exclude: ".*versioneer.*"
+        exclude: "(setup.py|versioneer.py|tests/)"
       # This is for checking tests/* (everything else has a stricter check
       # below), but since there's no include it's run on everything
 
@@ -75,7 +74,7 @@ repos:
     rev: v1.6.1
     hooks:
       - id: mypy
-        exclude: ".*versioneer.*"
+        exclude: "(setup.py|versioneer.py)"
         args: [
           "--disallow-untyped-defs",
           "--ignore-missing-imports"
