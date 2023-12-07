@@ -48,7 +48,7 @@ repos:
     rev: 6.1.0
     hooks:
       - id: flake8
-        exclude: ^versioneer.py
+        exclude: versioneer.py
         additional_dependencies: [
           flake8-blind-except,
           flake8-builtins,
@@ -67,7 +67,7 @@ repos:
     rev: v1.6.1
     hooks:
       - id: mypy
-        exclude: ^versioneer.py
+        exclude: versioneer.py
       # This is for checking tests/* (everything else has a stricter check
       # below), but since there's no include it's run on everything
 
@@ -79,7 +79,7 @@ repos:
           --disallow-untyped-defs,
           --ignore-missing-imports,
         ]
-        exclude: ^versioneer.py,tests/
+        exclude: (versioneer.py|tests/)
 
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.32.0
