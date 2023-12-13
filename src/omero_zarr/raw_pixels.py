@@ -33,6 +33,16 @@ from ome_zarr.writer import (
     write_well_metadata,
 )
 from omero.model import Channel
+from omero.model.enums import (
+    PixelsTypedouble,
+    PixelsTypefloat,
+    PixelsTypeint8,
+    PixelsTypeint16,
+    PixelsTypeint32,
+    PixelsTypeuint8,
+    PixelsTypeuint16,
+    PixelsTypeuint32,
+)
 from omero.rtypes import unwrap
 from zarr.hierarchy import Group, open_group
 
@@ -99,7 +109,18 @@ def add_raw_image(
     tile_height: Optional[int] = None,
 ) -> List[str]:
     pixels = image.getPrimaryPixels()
-    d_type = image.getPixelsType()
+    pixelTypes = {
+        PixelsTypeint8: ["b", np.int8],
+        PixelsTypeuint8: ["B", np.uint8],
+        PixelsTypeint16: ["h", np.int16],
+        PixelsTypeuint16: ["H", np.uint16],
+        PixelsTypeint32: ["i", np.int32],
+        PixelsTypeuint32: ["I", np.uint32],
+        PixelsTypefloat: ["f", np.float32],
+        PixelsTypedouble: ["d", np.float64],
+    }
+    pixelType = pixels.getPixelsType().value
+    d_type = pixelTypes[pixelType][1]
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
     size_x = image.getSizeX()
