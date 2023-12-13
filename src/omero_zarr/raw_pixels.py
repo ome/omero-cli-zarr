@@ -109,6 +109,7 @@ def add_raw_image(
     tile_height: Optional[int] = None,
 ) -> List[str]:
     pixels = image.getPrimaryPixels()
+    omero_dtype = image.getPixelsType()
     pixelTypes = {
         PixelsTypeint8: ["b", np.int8],
         PixelsTypeuint8: ["B", np.uint8],
@@ -119,8 +120,7 @@ def add_raw_image(
         PixelsTypefloat: ["f", np.float32],
         PixelsTypedouble: ["d", np.float64],
     }
-    pixelType = pixels.getPixelsType().value
-    d_type = pixelTypes[pixelType][1]
+    d_type = pixelTypes[omero_dtype][1]
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
     size_x = image.getSizeX()
