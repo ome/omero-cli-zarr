@@ -69,8 +69,11 @@ Masks and Polygons
 To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons` command::
 
     # Saved under 1.ome.zarr/labels/0
-    # 1.ome.zarr/ should already exist or specify path with --source-image
+    # 1.ome.zarr/ should already exist...
     $ omero zarr masks Image:1
+
+    # ...or specify path with --source-image
+    $ omero zarr masks Image:1 --source-image my_image.ome.zarr
 
     # Labels saved under each image. e.g 2.ome.zarr/A/1/0/labels/0
     # 2.ome.zarr should already be exported or specify path with --source-image
