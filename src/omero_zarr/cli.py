@@ -283,7 +283,7 @@ class ZarrControl(BaseControl):
             default="id",
             choices=["id", "name"],
             help=(
-                "How to name the Image or Plate zarr. Default 'id' is [ID].zarr. "
+                "How to name the Image or Plate zarr. Default 'id' is [ID].ome.zarr. "
                 "'name' is [NAME].ome.zarr"
             ),
         )
