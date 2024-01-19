@@ -1,4 +1,10 @@
 
+# 0.5.5 (November 2023)
+
+- Fix install build (pin scm version) ([#159](https://github.com/ome/omero-cli-zarr/pull/159))
+- Fix data-type for float-32 images ([#157](https://github.com/ome/omero-cli-zarr/pull/157))
+
+
 # 0.5.4 (November 2023)
 
 - Fix path/to/image when exporting Plate images ([#146](https://github.com/ome/omero-cli-zarr/pull/146))
