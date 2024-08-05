@@ -12,7 +12,7 @@ from OMERO as zarr files, according to the spec at
 https://github.com/ome/omero-ms-zarr/blob/master/spec.md
 as well as Masks associated with Images.
 
-Images are 5D arrays of shape `(t, c, z, y, x)`.
+Images are nD arrays of shape, up to `(t, c, z, y, x)`.
 Plates are a hierarchy of `plate/row/column/field(image)`.
 Masks are 2D bitmasks which can exist on muliplte planes of an Image.
 In `ome-zarr` sets of Masks are collected together into "labels".
@@ -20,8 +20,7 @@ In `ome-zarr` sets of Masks are collected together into "labels".
 It supports export using 2 alternative methods:
 
 - By default the OMERO API is used to load planes as numpy arrays
-  and the zarr file is created from this data. NB: currently, large
-  tiled images are not supported by this method.
+  and the zarr file is created from this data.
 
 - Alternatively, if you can read directly from the OMERO binary
   repository and have installed https://github.com/glencoesoftware/bioformats2raw
@@ -37,16 +36,19 @@ Images and Plates
 To export Images or Plates via the OMERO API::
 
 
-    # Image will be saved in current directory as 1.zarr
+    # Image will be saved in current directory as 1.ome.zarr
     $ omero zarr export Image:1
 
-    # Plate will be saved in current directory as 2.zarr
+    # Plate will be saved in current directory as 2.ome.zarr
     $ omero zarr export Plate:2
+
+    # Use the Image or Plate 'name' to save e.g. my_image.ome.zarr
+    $ omero zarr --name_by name export Image:1
 
     # Specify an output directory
     $ omero zarr --output /home/user/zarr_files export Image:1
 
-    # By default, a tile size of 1024 is used. Specify values with
+    # By default, a tile (chunk) size of 1024 is used. Specify values with
     $ omero zarr export Image:1 --tile_width 256 --tile_height 256
 
 
@@ -66,24 +68,28 @@ Masks and Polygons
 
 To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons` command::
 
-    # Saved under 1.zarr/labels/0 - 1.zarr/ must already exist
+    # Saved under 1.ome.zarr/labels/0
+    # 1.ome.zarr/ should already exist...
     $ omero zarr masks Image:1
 
-    # Labels saved under each image. e.g 2.zarr/A/1/0/labels/0
-    # Plate should already be exported
+    # ...or specify path with --source-image
+    $ omero zarr masks Image:1 --source-image my_image.ome.zarr
+
+    # Labels saved under each image. e.g 2.ome.zarr/A/1/0/labels/0
+    # 2.ome.zarr should already be exported or specify path with --source-image
     $ omero zarr masks Plate:2
 
-    # Saved under zarr_files/1.zarr/labels/0
+    # Saved under zarr_files/1.ome.zarr/labels/0
     $ omero zarr --output /home/user/zarr_files masks Image:1
 
     # Specify the label-name. (default is '0')
-    # e.g. Export to 1.zarr/labels/A
+    # e.g. Export to 1.ome.zarr/labels/A
     $ omero zarr masks Image:1 --label-name=A
 
     # Allow overlapping masks or polygons (overlap will be maximum value of the dtype)
     $ omero zarr polygons Image:1 --overlaps=dtype_max
 
-The default behaviour is to export all masks or polygons on the Image to a single 5D
+The default behaviour is to export all masks or polygons on the Image to a single nD
 "labeled" zarr array, with a different value for each Shape.
 An exception will be thrown if any of the masks overlap, unless the `--overlaps`
 option is used as above.
