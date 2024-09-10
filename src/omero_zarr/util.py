@@ -17,7 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from omero.gateway import ImageWrapper
 from zarr.storage import FSStore
@@ -105,7 +105,7 @@ def marshal_axes(image: ImageWrapper) -> List[Dict]:
 
 
 def marshal_transformations(
-    image: ImageWrapper, levels: int = 1, multiscales_zoom: float = 2.0
+    image: ImageWrapper, levels: int = 1, ds_scale: Optional[List[int]] = None
 ) -> List[List[Dict]]:
     axes = marshal_axes(image)
     pixel_sizes = marshal_pixel_sizes(image)
@@ -114,7 +114,6 @@ def marshal_transformations(
     transformations = []
     zooms = {"x": 1.0, "y": 1.0, "z": 1.0, "c": 1.0, "t": 1.0}
     for level in range(levels):
-        # {"type": "scale", "scale": [1, 1, 0.3, 0.5, 0.5]
         scales = []
         for index, axis in enumerate(axes):
             pixel_size = 1
@@ -123,8 +122,15 @@ def marshal_transformations(
             scales.append(zooms[axis["name"]] * pixel_size)
         # ...with a single 'scale' transformation each
         transformations.append([{"type": "scale", "scale": scales}])
-        # NB we rescale X and Y for each level, but not Z, C, T
-        zooms["x"] = zooms["x"] * multiscales_zoom
-        zooms["y"] = zooms["y"] * multiscales_zoom
+
+        if ds_scale is None:
+            # NB we rescale X and Y for each level, but not Z, C, T
+            multiscales_zoom = 2.0
+            zooms["x"] = zooms["x"] * multiscales_zoom
+            zooms["y"] = zooms["y"] * multiscales_zoom
+        else:
+            assert len(ds_scale) == len(axes)
+            for axis, scale in zip(axes, ds_scale):
+                zooms[axis["name"]] = zooms[axis["name"]] * scale
 
     return transformations

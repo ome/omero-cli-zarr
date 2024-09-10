@@ -283,6 +283,12 @@ class ZarrControl(BaseControl):
             type=ProxyStringType("Image"),
             help="The Image to export.",
         )
+        export.add_argument(
+            "--ds_scale",
+            type=str,
+            default=None,
+            help="Downsample scale factors, e.g. 1,1,2,2,2",
+        )
 
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
