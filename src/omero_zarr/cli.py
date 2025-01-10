@@ -244,6 +244,13 @@ class ZarrControl(BaseControl):
                 "overlapping labels"
             ),
         )
+        masks.add_argument(
+            "--ds_scale",
+            type=str,
+            default=None,
+            help="Downsample scale factors, e.g. 1,1,2,2,2, omitting Image"
+            " dimensions of size 1 which will be squeezed out of the exported labels",
+        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
@@ -287,7 +294,8 @@ class ZarrControl(BaseControl):
             "--ds_scale",
             type=str,
             default=None,
-            help="Downsample scale factors, e.g. 1,1,2,2,2",
+            help="Downsample scale factors, e.g. 1,1,2,2,2, omitting dimensions"
+            " of size 1 which will be squeezed out of the exported Image",
         )
 
         for subcommand in (polygons, masks, export):
