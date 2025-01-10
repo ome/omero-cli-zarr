@@ -294,8 +294,8 @@ class ZarrControl(BaseControl):
             "--ds_scale",
             type=str,
             default=None,
-            help="Downsample scale factors, e.g. 1,1,2,2,2, omitting dimensions"
-            " of size 1 which will be squeezed out of the exported Image",
+            help="Downsample scale factors, e.g. 1,1,2,2,2, omitting dimensions where "
+            "the image is size 1, since they will be squeezed from the exported Image",
         )
 
         for subcommand in (polygons, masks, export):
