@@ -41,6 +41,11 @@ from .raw_pixels import (
     image_to_zarr,
     plate_to_zarr,
 )
+from .extinfo import (
+    get_images,
+    set_external_info,
+    get_path,
+)
 
 HELP = """Export data in zarr format.
 
@@ -108,6 +113,7 @@ Options
 
 POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
 
+EXTINFO_HELP = """Set the external info path for an ome.zarr image."""
 
 def gateway_required(func: Callable) -> Callable:
     """
@@ -284,6 +290,11 @@ class ZarrControl(BaseControl):
             help="The Image to export.",
         )
 
+        exinfo = parser.add(sub, self.extinfo, EXTINFO_HELP)
+        exinfo.add_argument("object",
+            type=ProxyStringType(),
+            help="Object in Class:ID format")
+
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
@@ -334,6 +345,21 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+
+    @gateway_required
+    def extinfo(self, args: argparse.Namespace) -> None:
+        for img in get_images(self.gateway, args.object):
+            path = get_path(self.gateway, img.getId())
+            img = img._obj
+            if path.endswith("OME/METADATA.ome.xml"):
+                path = path.replace("OME/METADATA.ome.xml", "0")
+                path = f"/{path}"
+                img = set_external_info(img, path)
+                img = self.gateway.getUpdateService().saveAndReturnObject(img)
+                self.ctx.out(f"Set path to '{path}' for image {img.id._val}")
+            else:
+                self.ctx.out(f"'{path}' for image {img.id._val} doesn't seem to be an ome.zarr, skipping.")
+
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
