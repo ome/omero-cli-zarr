@@ -44,7 +44,6 @@ from .raw_pixels import (
 from .extinfo import (
     get_images,
     set_external_info,
-    get_path,
 )
 
 HELP = """Export data in zarr format.
@@ -348,17 +347,14 @@ class ZarrControl(BaseControl):
 
     @gateway_required
     def extinfo(self, args: argparse.Namespace) -> None:
-        for img in get_images(self.gateway, args.object):
-            path = get_path(self.gateway, img.getId())
+        for img, well, idx in get_images(self.gateway, args.object):
             img = img._obj
-            if path.endswith("OME/METADATA.ome.xml"):
-                path = path.replace("OME/METADATA.ome.xml", "0")
-                path = f"/{path}"
-                img = set_external_info(img, path)
+            try:
+                img = set_external_info(self.gateway, img, well, idx)
                 img = self.gateway.getUpdateService().saveAndReturnObject(img)
-                self.ctx.out(f"Set path to '{path}' for image {img.id._val}")
-            else:
-                self.ctx.out(f"'{path}' for image {img.id._val} doesn't seem to be an ome.zarr, skipping.")
+                self.ctx.out(f"Set path to '{img.details.externalInfo.lsid._val}' for image {img.id._val}")
+            except Exception as e:
+                self.ctx.err(f"Failed to set external info for image {img.id._val}: {e}")
 
 
     def _lookup(
