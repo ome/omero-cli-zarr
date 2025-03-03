@@ -44,6 +44,8 @@ from .raw_pixels import (
 from .extinfo import (
     get_images,
     set_external_info,
+    get_extinfo,
+    external_info_str
 )
 
 HELP = """Export data in zarr format.
@@ -112,7 +114,11 @@ Options
 
 POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
 
-EXTINFO_HELP = """Set the external info path for an ome.zarr image."""
+EXTINFO_HELP = """Get the ExternalInfo path of an ome.zarr image.
+
+Use --set to set the external info path
+or --reset in order to remove the ExternalInfo from the image.
+"""
 
 def gateway_required(func: Callable) -> Callable:
     """
@@ -289,10 +295,35 @@ class ZarrControl(BaseControl):
             help="The Image to export.",
         )
 
-        exinfo = parser.add(sub, self.extinfo, EXTINFO_HELP)
-        exinfo.add_argument("object",
-            type=ProxyStringType(),
-            help="Object in Class:ID format")
+        extinfo = parser.add(sub, self.extinfo, EXTINFO_HELP)
+        extinfo.add_argument("object",  
+                type=ProxyStringType(),
+                help="Object in Class:ID format")
+        extinfo.add_argument(
+            "--set",
+            action="store_true",
+            help="Set the ExternalInfo path"
+        )
+        extinfo.add_argument(
+            "--path",
+            default=None,
+            help="Use a specific path (default: Determine from clientPath) (only used in combination with --set)"
+        )
+        extinfo.add_argument(
+            "--entityType",
+            default="com.glencoesoftware.ngff:multiscales",
+            help="Use a specific entityType (default: com.glencoesoftware.ngff:multiscales) (only used in combination with --set)"
+        )
+        extinfo.add_argument(
+            "--entityId",
+            default="3",
+            help="Use a specific entityId (default: 3) (only used in combination with --set)"
+        )
+        extinfo.add_argument(
+            "--reset",
+            action="store_true",
+            help="Removes the ExternalInfo"
+        )
 
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
@@ -345,16 +376,31 @@ class ZarrControl(BaseControl):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
 
+
     @gateway_required
     def extinfo(self, args: argparse.Namespace) -> None:
         for img, well, idx in get_images(self.gateway, args.object):
             img = img._obj
-            try:
-                img = set_external_info(self.gateway, img, well, idx)
-                img = self.gateway.getUpdateService().saveAndReturnObject(img)
-                self.ctx.out(f"Set path to '{img.details.externalInfo.lsid._val}' for image {img.id._val}")
-            except Exception as e:
-                self.ctx.err(f"Failed to set external info for image {img.id._val}: {e}")
+            extinfo = get_extinfo(self.gateway, img)
+            if args.set:
+                try:
+                    img = set_external_info(self.gateway, img, well, idx, args.path, args.entityType, int(args.entityId))
+                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
+                    self.ctx.out(f"Set ExternalInfo for image ({img.id._val}) {img.name._val}:\n{external_info_str(img.details.externalInfo)}")
+                except Exception as e:
+                    self.ctx.err(f"Failed to set external info for image ({img.id._val}) {img.name._val}: {e}")
+            elif args.reset:
+                if extinfo:
+                    img.details.externalInfo = None
+                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
+                    self.ctx.out(f"Removed ExternalInfo from image ({img.id._val}) {img.name._val}")
+                else:
+                    self.ctx.out(f"Image ({img.id._val}) {img.name._val} has no ExternalInfo")
+            else:
+                if extinfo:
+                    self.ctx.out(f"ExternalInfo for image ({img.id._val}) {img.name._val}:\n{external_info_str(extinfo)}")
+                else:
+                    self.ctx.out(f"Image ({img.id._val}) {img.name._val} has no ExternalInfo")
 
 
     def _lookup(
