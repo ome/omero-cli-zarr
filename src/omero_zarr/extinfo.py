@@ -38,6 +38,7 @@ def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
             select e from ExternalInfo as e
             where e.id = :id
         """
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
         extinfo = conn.getQueryService().findByQuery(query, params)
         return extinfo
     return None
@@ -66,6 +67,7 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
         join fetch usedFile.originalFile as f
         join fetch f.hasher where image.id = :id
     """
+    conn.SERVICE_OPTS.setOmeroGroup("-1")
     fs = conn.getQueryService().findByQuery(query, params)
     res = fs._getUsedFiles()[0]._clientPath._val
     return res
@@ -93,7 +95,7 @@ def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
     return obj
 
 
-def get_images(conn: BlitzGateway, object) -> tuple[ImageWrapper, str | None, int | None]:
+def get_images(conn: BlitzGateway, object) -> tuple[ImageWrapper, str, int]:
     """
     Generator that yields images from any OMERO container object.
 
@@ -143,7 +145,7 @@ def get_images(conn: BlitzGateway, object) -> tuple[ImageWrapper, str | None, in
 
 
 def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int, 
-    lsid: str | None = None, entityType: str | None = None, entityId: int | None = None) -> ImageI:
+    lsid: str, entityType: str, entityId: int) -> ImageI:
     """
     Set the external info for an OMERO image.
 
