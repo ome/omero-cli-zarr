@@ -27,7 +27,7 @@ def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
         ExternalInfoI: External info object
 
     Raises:
-        Exception: If the query fails or the path cannot be retrieved
+        Exception: If the query fails.
     """
 
     details = image.getDetails()
@@ -56,7 +56,7 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
         str: path of the image file
 
     Raises:
-        Exception: If the query fails or the path cannot be retrieved
+        Exception: If the query fails.
     """
     params = ParametersI()
     params.addId(image_id)
@@ -65,12 +65,14 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
         join fetch fs.images as image
         left outer join fetch fs.usedFiles as usedFile
         join fetch usedFile.originalFile as f
-        join fetch f.hasher where image.id = :id
+        join fetch f.hasher
+        where image.id = :id
     """
+    
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     fs = conn.getQueryService().findByQuery(query, params)
-    res = fs._getUsedFiles()[0]._clientPath._val
-    return res
+    path = fs._getUsedFiles()[0]._clientPath._val
+    return path
 
 
 def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
@@ -152,8 +154,8 @@ def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int,
     Args:
         conn (BlitzGateway): Active OMERO gateway connection
         img (ImageI): OMERO image
-        well (str): Well position (e.g. 'A1')
-        idx (int): Well sample / field index
+        well (str | None): Optional well position (e.g. 'A1')
+        idx (int | None): Optional well sample / field index
         lsid (str | None): Optional custom LSID path. If None, path is derived from image's clientpath
         entityType (str | None): Optional entity type. Defaults to 'com.glencoesoftware.ngff:multiscales'
         entityId (int | None): Optional entity ID. Defaults to 3
@@ -184,7 +186,8 @@ def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int,
                 else:
                     raise ValueError(f"Couldn't parse well position: {well}")
             else:
-                path = path.replace("OME/METADATA.ome.xml", "0")
+                series = img.getSeries()._val
+                path = path.replace("OME/METADATA.ome.xml", f"{series}")
                 path = f"/{path}"
         else:
             raise ValueError(f"Doesn't seem to be an ome.zarr: {path}")

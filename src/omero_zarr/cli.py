@@ -305,9 +305,9 @@ class ZarrControl(BaseControl):
             help="Set the ExternalInfo path"
         )
         extinfo.add_argument(
-            "--path",
+            "--lsid",
             default=None,
-            help="Use a specific path (default: Determine from clientPath) (only used in combination with --set)"
+            help="Use a specific lsid (path) (default: Determine from clientPath) (only used in combination with --set)"
         )
         extinfo.add_argument(
             "--entityType",
@@ -384,7 +384,7 @@ class ZarrControl(BaseControl):
             extinfo = get_extinfo(self.gateway, img)
             if args.set:
                 try:
-                    img = set_external_info(self.gateway, img, well, idx, args.path, args.entityType, int(args.entityId))
+                    img = set_external_info(self.gateway, img, well, idx, args.lsid, args.entityType, int(args.entityId))
                     img = self.gateway.getUpdateService().saveAndReturnObject(img)
                     self.ctx.out(f"Set ExternalInfo for image ({img.id._val}) {img.name._val}:\n{external_info_str(img.details.externalInfo)}")
                 except Exception as e:
