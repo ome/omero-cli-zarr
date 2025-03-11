@@ -69,13 +69,13 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
     return path
 
 
-def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
+def _lookup(conn: BlitzGateway, _type: str, oid: int) -> BlitzObjectWrapper:
     """
     Look up an OMERO object by its type and ID.
 
     Args:
         conn (BlitzGateway): Active OMERO gateway connection
-        type (str): Type of OMERO object (e.g., "Screen", "Plate", "Image")
+        _type (str): Type of OMERO object (e.g., "Screen", "Plate", "Image")
         oid (int): Object ID to look up
 
     Returns:
@@ -85,9 +85,9 @@ def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
         ValueError: If the object doesn't exist
     """
     conn.SERVICE_OPTS.setOmeroGroup("-1")
-    obj = conn.getObject(type, oid)
+    obj = conn.getObject(_type, oid)
     if not obj:
-        raise ValueError(f"No such {type}: {oid}")
+        raise ValueError(f"No such {_type}: {oid}")
     return obj
 
 
@@ -98,10 +98,10 @@ def get_images(conn: BlitzGateway, obj: Any) -> Generator[ImageWrapper, str, int
     Recursively traverses OMERO container hierarchies
     (Screen/Plate/Project/Dataset) to find all contained images.
 
-    Args:
-        conn (BlitzGateway): Active OMERO gateway connection
-        obj: OMERO container object (Screen, Plate, Project, Dataset, Image)
-            or a list of such objects
+    | Args:
+    |    conn (BlitzGateway): Active OMERO gateway connection
+    |    obj: OMERO container object (Screen, Plate, Project, Dataset, Image)
+    |        or a list of such objects
 
     Yields:
         tuple: Contains:
@@ -154,16 +154,16 @@ def set_external_info(
     """
     Set the external info for an OMERO image.
 
-    Args:
-        conn (BlitzGateway): Active OMERO gateway connection
-        img (ImageI): OMERO image
-        well (str | None): Optional well position (e.g. 'A1')
-        idx (int | None): Optional well sample / field index
-        lsid (str | None): Optional custom LSID path. If None, path is
-            derived from image's clientpath
-        entityType (str | None): Optional entity type. Defaults to
-            'com.glencoesoftware.ngff:multiscales'
-        entityId (int | None): Optional entity ID. Defaults to 3
+    | Args:
+    |    conn (BlitzGateway): Active OMERO gateway connection
+    |    img (ImageI): OMERO image
+    |    well (str | None): Optional well position (e.g. 'A1')
+    |    idx (int | None): Optional well sample field index
+    |    lsid (str | None): Optional custom LSID path. If None, path is
+    |        derived from image's clientpath
+    |    entityType (str | None): Optional entity type. Defaults to
+    |        'com.glencoesoftware.ngff:multiscales'
+    |    entityId (int | None): Optional entity ID. Defaults to 3
 
     Returns:
         ImageI: Updated OMERO image with external info set
