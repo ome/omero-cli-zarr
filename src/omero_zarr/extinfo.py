@@ -1,18 +1,9 @@
 import re
 
 from omero.gateway import BlitzGateway, BlitzObjectWrapper, ImageWrapper
-from omero.model import (
-    Dataset,
-    ExternalInfoI,
-    Image,
-    ImageI,
-    Plate,
-    Project,
-    Screen,
-)
+from omero.model import Dataset, ExternalInfoI, Image, ImageI, Plate, Project, Screen
 from omero.rtypes import rlong, rstring
 from omero_sys_ParametersI import ParametersI
-
 
 # Regex to match well positions (eg. A1)
 WELL_POS_RE = re.compile(r"(?P<row>\D+)(?P<col>\d+)")
@@ -155,7 +146,7 @@ def set_external_info(
     idx: int,
     lsid: str,
     entityType: str,
-    entityId: int
+    entityId: int,
 ) -> ImageI:
     """
     Set the external info for an OMERO image.
@@ -201,9 +192,7 @@ def set_external_info(
                 path = path.replace("OME/METADATA.ome.xml", f"{series}")
                 path = f"/{path}"
         else:
-            raise ValueError(
-                f"Doesn't seem to be an ome.zarr: {path}"
-            )
+            raise ValueError(f"Doesn't seem to be an ome.zarr: {path}")
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)
