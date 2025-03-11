@@ -1,14 +1,17 @@
-from omero.gateway import BlitzGateway, ImageWrapper
-from omero.gateway import BlitzObjectWrapper
-from omero.model import ExternalInfoI, ImageI
-from omero.rtypes import rstring, rlong
-from omero_sys_ParametersI import ParametersI
-from omero.model import Image
-from omero.model import Plate
-from omero.model import Screen
-from omero.model import Dataset
-from omero.model import Project
 import re
+
+from omero.gateway import BlitzGateway, BlitzObjectWrapper, ImageWrapper
+from omero.model import (
+    Dataset,
+    ExternalInfoI,
+    Image,
+    ImageI,
+    Plate,
+    Project,
+    Screen,
+)
+from omero.rtypes import rlong, rstring
+from omero_sys_ParametersI import ParametersI
 
 
 # Regex to match well positions (eg. A1)
