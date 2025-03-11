@@ -406,6 +406,13 @@ class ZarrControl(BaseControl):
         for img, well, idx in get_images(self.gateway, args.object):
             img = img._obj
             extinfo = get_extinfo(self.gateway, img)
+
+            if self.gateway is None:
+                self.ctx.die(112, "No gateway")
+                return
+
+            update_service = self.gateway.getUpdateService()
+
             if args.set:
                 try:
                     img = set_external_info(
@@ -417,7 +424,7 @@ class ZarrControl(BaseControl):
                         args.entityType,
                         int(args.entityId),
                     )
-                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
+                    img = update_service.saveAndReturnObject(img)
                     self.ctx.out(
                         f"Set ExternalInfo for image ({img.id._val}) "
                         f"{img.name._val}:\n"
@@ -431,7 +438,7 @@ class ZarrControl(BaseControl):
             elif args.reset:
                 if extinfo:
                     img.details.externalInfo = None
-                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
+                    img = update_service.saveAndReturnObject(img)
                     self.ctx.out(
                         f"Removed ExternalInfo from image "
                         f"({img.id._val}) {img.name._val}"

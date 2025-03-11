@@ -1,4 +1,5 @@
 import re
+from typing import Any, Generator
 
 from omero.gateway import BlitzGateway, BlitzObjectWrapper, ImageWrapper
 from omero.model import Dataset, ExternalInfoI, Image, ImageI, Plate, Project, Screen
@@ -90,7 +91,7 @@ def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
     return obj
 
 
-def get_images(conn: BlitzGateway, obj) -> tuple[ImageWrapper, str, int]:
+def get_images(conn: BlitzGateway, obj: Any) -> Generator[ImageWrapper, str, int]:
     """
     Generator that yields images from any OMERO container object.
 
@@ -100,7 +101,7 @@ def get_images(conn: BlitzGateway, obj) -> tuple[ImageWrapper, str, int]:
     Args:
         conn (BlitzGateway): Active OMERO gateway connection
         obj: OMERO container object (Screen, Plate, Project, Dataset, Image)
-          or a list of such objects
+            or a list of such objects
 
     Yields:
         tuple: Contains:
@@ -138,6 +139,8 @@ def get_images(conn: BlitzGateway, obj) -> tuple[ImageWrapper, str, int]:
     else:
         raise ValueError(f"Unsupported type: {obj.__class__.__name__}")
 
+    return 0
+
 
 def set_external_info(
     conn: BlitzGateway,
@@ -157,9 +160,9 @@ def set_external_info(
         well (str | None): Optional well position (e.g. 'A1')
         idx (int | None): Optional well sample / field index
         lsid (str | None): Optional custom LSID path. If None, path is
-          derived from image's clientpath
+            derived from image's clientpath
         entityType (str | None): Optional entity type. Defaults to
-          'com.glencoesoftware.ngff:multiscales'
+            'com.glencoesoftware.ngff:multiscales'
         entityId (int | None): Optional entity ID. Defaults to 3
 
     Returns:
@@ -167,7 +170,8 @@ def set_external_info(
 
     Raises:
         ValueError: If the path cannot be determined from clientpath and no
-          lsid is provided, or if the well position format is invalid
+            lsid is provided, or if the well position format is invalid
+
     """
     if not entityType:
         entityType = "com.glencoesoftware.ngff:multiscales"
@@ -202,7 +206,7 @@ def set_external_info(
     return img
 
 
-def _checkNone(obj) -> str:
+def _checkNone(obj: Any) -> str:
     """
     Helper function to safely get string value from OMERO rtype objects.
 
@@ -228,7 +232,7 @@ def external_info_str(extinfo: ExternalInfoI) -> str:
         str: Formatted string containing entityType, entityId and lsid,
             or "None" if extinfo is None
     """
-    if extinfo:
+    if extinfo is not None:
         return (
             f"[entityType={_checkNone(extinfo.entityType)}\n"
             f" entityId={_checkNone(extinfo.entityId)}\n"
