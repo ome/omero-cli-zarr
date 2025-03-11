@@ -42,7 +42,7 @@ def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
         extinfo = conn.getQueryService().findByQuery(query, params)
         return extinfo
     return None
-    
+
 
 def _get_path(conn: BlitzGateway, image_id: int) -> str:
     """
@@ -68,7 +68,6 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
         join fetch f.hasher
         where image.id = :id
     """
-    
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     fs = conn.getQueryService().findByQuery(query, params)
     path = fs._getUsedFiles()[0]._clientPath._val
@@ -97,17 +96,17 @@ def _lookup(conn: BlitzGateway, type: str, oid: int) -> BlitzObjectWrapper:
     return obj
 
 
-def get_images(conn: BlitzGateway, object) -> tuple[ImageWrapper, str, int]:
+def get_images(conn: BlitzGateway, obj) -> tuple[ImageWrapper, str, int]:
     """
     Generator that yields images from any OMERO container object.
 
-    Recursively traverses OMERO container hierarchies (Screen/Plate/Project/Dataset)
-    to find all contained images.
+    Recursively traverses OMERO container hierarchies
+    (Screen/Plate/Project/Dataset) to find all contained images.
 
     Args:
         conn (BlitzGateway): Active OMERO gateway connection
-        object: OMERO container object (Screen, Plate, Project, Dataset, Image)
-              or a list of such objects
+        obj: OMERO container object (Screen, Plate, Project, Dataset, Image)
+          or a list of such objects
 
     Yields:
         tuple: Contains:
@@ -118,36 +117,43 @@ def get_images(conn: BlitzGateway, object) -> tuple[ImageWrapper, str, int]:
     Raises:
         ValueError: If given an unsupported object type
     """
-    if isinstance(object, list):
-        for x in object:
+    if isinstance(obj, list):
+        for x in obj:
             yield from get_images(conn, x)
-    elif isinstance(object, Screen):
-        scr = _lookup(conn, "Screen", object.id)
+    elif isinstance(obj, Screen):
+        scr = _lookup(conn, "Screen", obj.id)
         for plate in scr.listChildren():
             yield from get_images(conn, plate._obj)
-    elif isinstance(object, Plate):
-        plt = _lookup(conn, "Plate", object.id)
+    elif isinstance(obj, Plate):
+        plt = _lookup(conn, "Plate", obj.id)
         for well in plt.listChildren():
             for idx in range(0, well.countWellSample()):
                 img = well.getImage(idx)
                 yield img, well.getWellPos(), idx
-    elif isinstance(object, Project):
-        prj = _lookup(conn, "Project", object.id)
+    elif isinstance(obj, Project):
+        prj = _lookup(conn, "Project", obj.id)
         for ds in prj.listChildren():
             yield from get_images(conn, ds._obj)
-    elif isinstance(object, Dataset):
-        ds = _lookup(conn, "Dataset", object.id)
+    elif isinstance(obj, Dataset):
+        ds = _lookup(conn, "Dataset", obj.id)
         for img in ds.listChildren():
             yield img, None, None
-    elif isinstance(object, Image):
-        img = _lookup(conn, "Image", object.id)
+    elif isinstance(obj, Image):
+        img = _lookup(conn, "Image", obj.id)
         yield img, None, None
     else:
-        raise ValueError(f"Unsupported type: {object.__class__.__name__}")
+        raise ValueError(f"Unsupported type: {obj.__class__.__name__}")
 
 
-def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int, 
-    lsid: str, entityType: str, entityId: int) -> ImageI:
+def set_external_info(
+    conn: BlitzGateway,
+    img: ImageI,
+    well: str,
+    idx: int,
+    lsid: str,
+    entityType: str,
+    entityId: int
+) -> ImageI:
     """
     Set the external info for an OMERO image.
 
@@ -156,21 +162,23 @@ def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int,
         img (ImageI): OMERO image
         well (str | None): Optional well position (e.g. 'A1')
         idx (int | None): Optional well sample / field index
-        lsid (str | None): Optional custom LSID path. If None, path is derived from image's clientpath
-        entityType (str | None): Optional entity type. Defaults to 'com.glencoesoftware.ngff:multiscales'
+        lsid (str | None): Optional custom LSID path. If None, path is
+          derived from image's clientpath
+        entityType (str | None): Optional entity type. Defaults to
+          'com.glencoesoftware.ngff:multiscales'
         entityId (int | None): Optional entity ID. Defaults to 3
 
     Returns:
         ImageI: Updated OMERO image with external info set
 
     Raises:
-        ValueError: If the path cannot be determined from clientpath and no lsid is provided,
-                  or if the well position format is invalid
+        ValueError: If the path cannot be determined from clientpath and no
+          lsid is provided, or if the well position format is invalid
     """
     if not entityType:
         entityType = "com.glencoesoftware.ngff:multiscales"
     if not entityId:
-         entityId = 3
+        entityId = 3
     if lsid:
         path = lsid
     else:
@@ -190,7 +198,9 @@ def set_external_info(conn: BlitzGateway, img: ImageI, well: str, idx: int,
                 path = path.replace("OME/METADATA.ome.xml", f"{series}")
                 path = f"/{path}"
         else:
-            raise ValueError(f"Doesn't seem to be an ome.zarr: {path}")
+            raise ValueError(
+                f"Doesn't seem to be an ome.zarr: {path}"
+            )
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)
@@ -227,5 +237,9 @@ def external_info_str(extinfo: ExternalInfoI) -> str:
             or "None" if extinfo is None
     """
     if extinfo:
-        return f"[entityType={_checkNone(extinfo.entityType)}\n entityId={_checkNone(extinfo.entityId)}\n lsid={_checkNone(extinfo.lsid)}]"
+        return (
+            f"[entityType={_checkNone(extinfo.entityType)}\n"
+            f" entityId={_checkNone(extinfo.entityId)}\n"
+            f" lsid={_checkNone(extinfo.lsid)}]"
+        )
     return "None"
