@@ -57,6 +57,7 @@ Subcommands
  - masks
 
 """
+
 EXPORT_HELP = """Export an image in zarr format.
 
 Using bioformats2raw
@@ -120,6 +121,7 @@ Use --set to set the external info path
 or --reset in order to remove the ExternalInfo from the image.
 """
 
+
 def gateway_required(func: Callable) -> Callable:
     """
     Decorator which initializes a client (self.client),
@@ -175,7 +177,7 @@ class ZarrControl(BaseControl):
             "--style",
             choices=("split", "labeled"),
             default="labeled",
-            help=("Choice of storage for ROIs [breaks ome-zarr]"),
+            help="Choice of storage for ROIs [breaks ome-zarr]",
         )
         polygons.add_argument(
             "--label-path",
@@ -188,8 +190,8 @@ class ZarrControl(BaseControl):
         polygons.add_argument(
             "--source-image",
             help=(
-                "Path to the multiscales group containing the source image/plate. "
-                "By default, use the output directory"
+                "Path to the multiscales group containing the source "
+                "image/plate. By default, use the output directory"
             ),
             default=None,
         )
@@ -202,7 +204,10 @@ class ZarrControl(BaseControl):
         )
         polygons.add_argument(
             "--label-name",
-            help=("Name of the array that will be stored. Ignored for --style=split"),
+            help=(
+                "Name of the array that will be stored. Ignored for "
+                "--style=split"
+            ),
             default="0",
         )
 
@@ -215,8 +220,8 @@ class ZarrControl(BaseControl):
         masks.add_argument(
             "--source-image",
             help=(
-                "Path to the multiscales group containing the source image/plate. "
-                "By default, use the output directory"
+                "Path to the multiscales group containing the source "
+                "image/plate. By default, use the output directory"
             ),
             default=None,
         )
@@ -230,14 +235,17 @@ class ZarrControl(BaseControl):
         )
         masks.add_argument(
             "--label-name",
-            help=("Name of the array that will be stored. Ignored for --style=split"),
+            help=(
+                "Name of the array that will be stored. Ignored for "
+                "--style=split"
+            ),
             default="0",
         )
         masks.add_argument(
             "--style",
             choices=("split", "labeled"),
             default="labeled",
-            help=("Choice of storage for ROIs [breaks ome-zarr]"),
+            help="Choice of storage for ROIs [breaks ome-zarr]",
         )
         masks.add_argument(
             "--label-bits",
@@ -260,13 +268,18 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--bf",
             action="store_true",
-            help="Use bioformats2raw on the server to export images. Requires"
-            " bioformats2raw 0.3.0 or higher and access to the managed repo.",
+            help=(
+                "Use bioformats2raw on the server to export images. Requires "
+                "bioformats2raw 0.3.0 or higher and access to the managed "
+                "repo."
+            ),
         )
         export.add_argument(
             "--bfpath",
-            help="Use bioformats2raw on a local copy of a file. Requires"
-            " bioformats2raw 0.4.0 or higher.",
+            help=(
+                "Use bioformats2raw on a local copy of a file. Requires "
+                "bioformats2raw 0.4.0 or higher."
+            ),
         )
         export.add_argument(
             "--tile_width",
@@ -281,13 +294,18 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--resolutions",
             default=None,
-            help="Number of pyramid resolutions to generate"
-            " (only for use with bioformats2raw)",
+            help=(
+                "Number of pyramid resolutions to generate "
+                "(only for use with bioformats2raw)"
+            ),
         )
         export.add_argument(
             "--max_workers",
             default=None,
-            help="Maximum number of workers (only for use with bioformats2raw)",
+            help=(
+                "Maximum number of workers (only for "
+                "use with bioformats2raw)"
+            ),
         )
         export.add_argument(
             "object",
@@ -296,38 +314,53 @@ class ZarrControl(BaseControl):
         )
 
         extinfo = parser.add(sub, self.extinfo, EXTINFO_HELP)
-        extinfo.add_argument("object",  
-                type=ProxyStringType(),
-                help="Object in Class:ID format")
+        extinfo.add_argument(
+            "object",
+            type=ProxyStringType(),
+            help="Object in Class:ID format",
+        )
         extinfo.add_argument(
             "--set",
             action="store_true",
-            help="Set the ExternalInfo path"
+            help="Set the ExternalInfo path",
         )
         extinfo.add_argument(
             "--lsid",
             default=None,
-            help="Use a specific lsid (path) (default: Determine from clientPath) (only used in combination with --set)"
+            help=(
+                "Use a specific lsid (path) (default: Determine from "
+                "clientPath) (only used in combination with --set)"
+            ),
         )
         extinfo.add_argument(
             "--entityType",
             default="com.glencoesoftware.ngff:multiscales",
-            help="Use a specific entityType (default: com.glencoesoftware.ngff:multiscales) (only used in combination with --set)"
+            help=(
+                "Use a specific entityType (default: "
+                "com.glencoesoftware.ngff:multiscales) "
+                "(only used in combination with --set)"
+            ),
         )
         extinfo.add_argument(
             "--entityId",
             default="3",
-            help="Use a specific entityId (default: 3) (only used in combination with --set)"
+            help=(
+                "Use a specific entityId (default: 3) "
+                "(only used in combination with --set)"
+            ),
         )
         extinfo.add_argument(
             "--reset",
             action="store_true",
-            help="Removes the ExternalInfo"
+            help="Removes the ExternalInfo",
         )
 
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
-                "--output", type=str, default="", help="The output directory"
+                "--output",
+                type=str,
+                default="",
+                help="The output directory",
             )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
@@ -335,9 +368,11 @@ class ZarrControl(BaseControl):
                 type=str,
                 default=MaskSaver.OVERLAPS[0],
                 choices=MaskSaver.OVERLAPS,
-                help="To allow overlapping shapes, use 'dtype_max':"
-                " All overlapping regions will be set to the"
-                " max value for the dtype",
+                help=(
+                    "To allow overlapping shapes, use 'dtype_max': "
+                    "All overlapping regions will be set to the "
+                    "max value for the dtype"
+                ),
             )
 
     @gateway_required
@@ -376,7 +411,6 @@ class ZarrControl(BaseControl):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
 
-
     @gateway_required
     def extinfo(self, args: argparse.Namespace) -> None:
         for img, well, idx in get_images(self.gateway, args.object):
@@ -384,24 +418,53 @@ class ZarrControl(BaseControl):
             extinfo = get_extinfo(self.gateway, img)
             if args.set:
                 try:
-                    img = set_external_info(self.gateway, img, well, idx, args.lsid, args.entityType, int(args.entityId))
-                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
-                    self.ctx.out(f"Set ExternalInfo for image ({img.id._val}) {img.name._val}:\n{external_info_str(img.details.externalInfo)}")
+                    img = set_external_info(
+                        self.gateway,
+                        img,
+                        well,
+                        idx,
+                        args.lsid,
+                        args.entityType,
+                        int(args.entityId),
+                    )
+                    img = self.gateway.getUpdateService()\
+                        .saveAndReturnObject(img)
+                    self.ctx.out(
+                        f"Set ExternalInfo for image ({img.id._val}) "
+                        f"{img.name._val}:\n"
+                        f"{external_info_str(img.details.externalInfo)}"
+                    )
                 except Exception as e:
-                    self.ctx.err(f"Failed to set external info for image ({img.id._val}) {img.name._val}: {e}")
+                    self.ctx.err(
+                        f"Failed to set external info for image "
+                        f"({img.id._val}) {img.name._val}: {e}"
+                    )
             elif args.reset:
                 if extinfo:
                     img.details.externalInfo = None
-                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
-                    self.ctx.out(f"Removed ExternalInfo from image ({img.id._val}) {img.name._val}")
+                    img = self.gateway.getUpdateService()\
+                        .saveAndReturnObject(img)
+                    self.ctx.out(
+                        f"Removed ExternalInfo from image "
+                        f"({img.id._val}) {img.name._val}"
+                    )
                 else:
-                    self.ctx.out(f"Image ({img.id._val}) {img.name._val} has no ExternalInfo")
+                    self.ctx.out(
+                        f"Image ({img.id._val}) {img.name._val} "
+                        "has no ExternalInfo"
+                    )
             else:
                 if extinfo:
-                    self.ctx.out(f"ExternalInfo for image ({img.id._val}) {img.name._val}:\n{external_info_str(extinfo)}")
+                    self.ctx.out(
+                        f"ExternalInfo for image ({img.id._val}) "
+                        f"{img.name._val}:\n"
+                        f"{external_info_str(extinfo)}"
+                    )
                 else:
-                    self.ctx.out(f"Image ({img.id._val}) {img.name._val} has no ExternalInfo")
-
+                    self.ctx.out(
+                        f"Image ({img.id._val}) {img.name._val} has no "
+                        "ExternalInfo"
+                    )
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
@@ -413,7 +476,9 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
+    def _bf_export(
+        self, image: BlitzObjectWrapper, args: argparse.Namespace
+    ) -> None:
         if args.bfpath:
             abs_path = Path(args.bfpath)
         elif image.getInplaceImport():
