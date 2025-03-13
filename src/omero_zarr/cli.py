@@ -415,6 +415,7 @@ class ZarrControl(BaseControl):
     def extinfo(self, args: argparse.Namespace) -> None:
         for img, well, idx in get_images(self.gateway, args.object):
             img = img._obj
+            group_id = img.getDetails().getGroup().id.val
             extinfo = get_extinfo(self.gateway, img)
             if args.set:
                 try:
