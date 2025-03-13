@@ -405,6 +405,7 @@ class ZarrControl(BaseControl):
     def extinfo(self, args: argparse.Namespace) -> None:
         for img, well, idx in get_images(self.gateway, args.object):
             img = img._obj
+            group_id = img.getDetails().getGroup().id.val
             extinfo = get_extinfo(self.gateway, img)
 
             if self.gateway is None:
@@ -424,7 +425,7 @@ class ZarrControl(BaseControl):
                         args.entityType,
                         int(args.entityId),
                     )
-                    img = update_service.saveAndReturnObject(img)
+                    img = update_service.saveAndReturnObject(img, {"omero.group": str(group_id)})
                     self.ctx.out(
                         f"Set ExternalInfo for image ({img.id._val}) "
                         f"{img.name._val}:\n"
@@ -438,7 +439,7 @@ class ZarrControl(BaseControl):
             elif args.reset:
                 if extinfo:
                     img.details.externalInfo = None
-                    img = update_service.saveAndReturnObject(img)
+                    img = update_service.saveAndReturnObject(img, {"omero.group": str(group_id)})
                     self.ctx.out(
                         f"Removed ExternalInfo from image "
                         f"({img.id._val}) {img.name._val}"
