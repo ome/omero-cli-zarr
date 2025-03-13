@@ -34,7 +34,7 @@ def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
             where e.id = :id
         """
         conn.SERVICE_OPTS.setOmeroGroup("-1")
-        extinfo = conn.getQueryService().findByQuery(query, params)
+        extinfo = conn.getQueryService().findByQuery(query, params, conn.SERVICE_OPTS)
         return extinfo
     return None
 
@@ -64,7 +64,7 @@ def _get_path(conn: BlitzGateway, image_id: int) -> str:
         where image.id = :id
     """
     conn.SERVICE_OPTS.setOmeroGroup("-1")
-    fs = conn.getQueryService().findByQuery(query, params)
+    fs = conn.getQueryService().findByQuery(query, params, conn.SERVICE_OPTS)
     path = fs._getUsedFiles()[0]._clientPath._val
     return path
 
@@ -85,7 +85,7 @@ def _lookup(conn: BlitzGateway, _type: str, oid: int) -> BlitzObjectWrapper:
         ValueError: If the object doesn't exist
     """
     conn.SERVICE_OPTS.setOmeroGroup("-1")
-    obj = conn.getObject(_type, oid)
+    obj = conn.getObject(_type, oid, opts=conn.SERVICE_OPTS)
     if not obj:
         raise ValueError(f"No such {_type}: {oid}")
     return obj
@@ -234,8 +234,8 @@ def external_info_str(extinfo: ExternalInfoI) -> str:
     """
     if extinfo is not None:
         return (
-            f"[entityType={_checkNone(extinfo.entityType)}\n"
-            f" entityId={_checkNone(extinfo.entityId)}\n"
-            f" lsid={_checkNone(extinfo.lsid)}]"
+            f"entityType={_checkNone(extinfo.entityType)}\n"
+            f"entityId={_checkNone(extinfo.entityId)}\n"
+            f"lsid={_checkNone(extinfo.lsid)}"
         )
     return "None"
