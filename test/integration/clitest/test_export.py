@@ -19,16 +19,16 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import pytest
-from cli import CLITest
 from omero.gateway import BlitzGateway
+from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
 
 
-class TestRender(CLITest):
+class TestRender(AbstractCLITest):
 
     def setup_method(self, method: str) -> None:
         """Set up the test."""
-        super().setup_method(method)
+        self.args = self.login_args()
         self.cli.register("zarr", ZarrControl, "TEST")
         self.delete_args = self.args + ["delete"]
         self.args += ["zarr"]
