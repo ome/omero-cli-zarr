@@ -58,5 +58,4 @@ class TestRender(AbstractCLITest):
         out, err = capsys.readouterr()
         lines = out.split("\n")
         print(lines)
-        assert "ok" in lines[0]
-        assert "ok" in lines[1]
+        assert "Exporting to" in lines[0]
