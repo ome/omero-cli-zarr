@@ -27,6 +27,9 @@ import dask.array as da
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from ome_zarr_models.v04.coordinate_transformations import VectorScale
+from ome_zarr_models.v04.image import ImageAttrs
+from ome_zarr_models.v04.multiscales import Dataset, Multiscale
 from omero.model import Channel
 from omero.model.enums import (
     PixelsTypedouble,
@@ -85,23 +88,25 @@ def add_image(
 
     paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
 
+    # create the image metadata
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
 
-    datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
-    for dataset, transform in zip(datasets, transformations):
-        dataset["coordinateTransformations"] = transform
+    ds_models = []
+    for path, transform in zip(paths, transformations):
+        transforms_dset = (VectorScale.build(transform[0]["scale"]),)
+        ds_models.append(Dataset(path=path, coordinateTransformations=transforms_dset))
 
-    # write_multiscales_metadata(parent, datasets, axes=axes)
-    multiscales = [
-        {
-            "version": "0.4",
-            "datasets": datasets,
-            "name": image.name,
-            "axes": axes,
-        }
-    ]
-    parent.attrs["multiscales"] = multiscales
+    multi = Multiscale(
+        axes=axes, datasets=tuple(ds_models), version="0.4", name=image.name
+    )
+    image = ImageAttrs(
+        multiscales=[multi],
+    )
+
+    # populate the zarr group with the image metadata (only "multiscales")
+    for k, v in image.model_dump(exclude_none=True).items():
+        parent.attrs[k] = v
 
     return (level_count, axes)
 

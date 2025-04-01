@@ -22,6 +22,7 @@ from typing import Any, Dict, List
 import dask.array as da
 import numpy as np
 import skimage.transform
+from ome_zarr_models.v04.axes import Axis
 from omero.gateway import ImageWrapper
 from zarr.storage import FSStore
 
@@ -82,7 +83,7 @@ def marshal_pixel_sizes(image: ImageWrapper) -> Dict[str, Dict]:
     return pixel_sizes
 
 
-def marshal_axes(image: ImageWrapper) -> List[Dict]:
+def marshal_axes(image: ImageWrapper) -> List[Axis]:
     # Prepare axes and transformations info...
     size_c = image.getSizeC()
     size_z = image.getSizeZ()
@@ -91,18 +92,20 @@ def marshal_axes(image: ImageWrapper) -> List[Dict]:
 
     axes = []
     if size_t > 1:
-        axes.append({"name": "t", "type": "time"})
+        axes.append(Axis(name="t", type="time", unit=None))
     if size_c > 1:
-        axes.append({"name": "c", "type": "channel"})
+        axes.append(Axis(name="c", type="channel", unit=None))
     if size_z > 1:
-        axes.append({"name": "z", "type": "space"})
+        zunit = None
         if pixel_sizes and "z" in pixel_sizes:
-            axes[-1]["unit"] = pixel_sizes["z"]["unit"]
+            zunit = pixel_sizes["z"]["unit"]
+        axes.append(Axis(name="z", type="space", unit=zunit))
     # last 2 dimensions are always y and x
     for dim in ("y", "x"):
-        axes.append({"name": dim, "type": "space"})
+        xyunit = None
         if pixel_sizes and dim in pixel_sizes:
-            axes[-1]["unit"] = pixel_sizes[dim]["unit"]
+            xyunit = pixel_sizes[dim]["unit"]
+        axes.append(Axis(name=dim, type="space", unit=xyunit))
 
     return axes
 
@@ -121,9 +124,9 @@ def marshal_transformations(
         scales = []
         for index, axis in enumerate(axes):
             pixel_size = 1
-            if axis["name"] in pixel_sizes:
-                pixel_size = pixel_sizes[axis["name"]].get("value", 1)
-            scales.append(zooms[axis["name"]] * pixel_size)
+            if axis.name in pixel_sizes:
+                pixel_size = pixel_sizes[axis.name].get("value", 1)
+            scales.append(zooms[axis.name] * pixel_size)
         # ...with a single 'scale' transformation each
         transformations.append([{"type": "scale", "scale": scales}])
         # NB we rescale X and Y for each level, but not Z, C, T
