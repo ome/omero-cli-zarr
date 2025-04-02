@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 import pytest
+from omero.model import RoiI
 from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
 
@@ -108,3 +109,58 @@ class TestRender(AbstractCLITest):
         ).read_text(encoding="utf-8")
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [512, 512]
+
+    def test_export_masks(self, capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
+        """Test export of a Zarr image."""
+        images = self.import_fake_file(sizeC=2, client=self.client)
+        img_id = images[0].id.val
+        size_xy = 512
+
+        # Create a mask
+        from omero_rois.library import mask_from_binary_image
+        from skimage.data import binary_blobs
+
+        blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
+            "int8"
+        )
+        red = [255, 0, 0, 255]
+        mask = mask_from_binary_image(blobs, rgba=red, z=0, c=0, t=0)
+
+        roi = RoiI()
+        roi.setImage(images[0])
+        roi.addShape(mask)
+        updateService = self.client.sf.getUpdateService()
+        updateService.saveAndReturnObject(roi)
+
+        print("tmp_path", tmp_path)
+
+        img_args = [f"Image:{img_id}", "--output", str(tmp_path)]
+        self.cli.invoke(
+            self.args + ["export"] + img_args,
+            strict=True,
+        )
+
+        self.cli.invoke(
+            self.args + ["masks"] + img_args,
+            strict=True,
+        )
+
+        out, err = capsys.readouterr()
+        lines = out.split("\n")
+        print(lines)
+        all_lines = ", ".join(lines)
+        assert "Exporting to" in all_lines
+        assert "Finished" in all_lines
+        assert "Found 1 mask shapes in 1 ROIs" in all_lines
+
+        labels_text = (
+            tmp_path / f"{img_id}.zarr" / "labels" / "0" / ".zattrs"
+        ).read_text(encoding="utf-8")
+        labels_json = json.loads(labels_text)
+        assert labels_json["image-label"]["colors"] == [{"label-value": 1, "rgba": red}]
+
+        arr_text = (
+            tmp_path / f"{img_id}.zarr" / "labels" / "0" / "0" / ".zarray"
+        ).read_text(encoding="utf-8")
+        arr_json = json.loads(arr_text)
+        assert arr_json["shape"] == [1, 512, 512]
