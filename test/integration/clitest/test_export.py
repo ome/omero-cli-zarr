@@ -41,7 +41,6 @@ class TestRender(AbstractCLITest):
         """Test export of a Zarr image."""
         sizec = 2
         images = self.import_fake_file(sizeC=sizec, client=self.client)
-        # Run test as self and as root
         img_id = images[0].id.val
         self.cli.invoke(
             self.args + ["export", f"Image:{img_id}", "--output", str(tmp_path)],
@@ -61,14 +60,51 @@ class TestRender(AbstractCLITest):
             encoding="utf-8"
         )
         attrs_json = json.loads(attrs_text)
+        print(attrs_json)
         assert "multiscales" in attrs_json
         assert len(attrs_json["omero"]["channels"]) == sizec
         assert attrs_json["omero"]["channels"][0]["window"]["min"] == 0
         assert attrs_json["omero"]["channels"][0]["window"]["max"] == 255
-        print(attrs_json)
 
         arr_text = (tmp_path / f"{img_id}.zarr" / "0" / ".zarray").read_text(
             encoding="utf-8"
         )
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [sizec, 512, 512]
+
+    def test_export_plate(self, capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
+
+        plates = self.import_plates(
+            client=self.client,
+            plates=1,
+            plate_acqs=1,
+            plate_cols=2,
+            plate_rows=2,
+            fields=1,
+        )
+        plate_id = plates[0].id.val
+        self.cli.invoke(
+            self.args + ["export", f"Plate:{plate_id}", "--output", str(tmp_path)],
+            strict=True,
+        )
+        out, err = capsys.readouterr()
+        lines = out.split("\n")
+        print(lines)
+        all_lines = ", ".join(lines)
+        assert "Exporting to" in all_lines
+        assert "Finished" in all_lines
+        assert (tmp_path / f"{plate_id}.zarr").is_dir()
+        attrs_text = (tmp_path / f"{plate_id}.zarr" / ".zattrs").read_text(
+            encoding="utf-8"
+        )
+        attrs_json = json.loads(attrs_text)
+        print(attrs_json)
+        assert len(attrs_json["plate"]["wells"]) == 4
+        assert attrs_json["plate"]["rows"] == [{"name": "A"}, {"name": "B"}]
+        assert attrs_json["plate"]["columns"] == [{"name": "1"}, {"name": "2"}]
+
+        arr_text = (
+            tmp_path / f"{plate_id}.zarr" / "A" / "1" / "0" / "0" / ".zarray"
+        ).read_text(encoding="utf-8")
+        arr_json = json.loads(arr_text)
+        assert arr_json["shape"] == [512, 512]
