@@ -18,6 +18,7 @@
 
 import argparse
 import logging
+import os
 import re
 import time
 from collections import defaultdict
@@ -184,6 +185,7 @@ def image_shapes_to_zarr(
             args.style,
             args.source_image,
             args.overlaps,
+            args.output,
         )
 
         if args.style == "split":
@@ -218,6 +220,7 @@ class MaskSaver:
         style: str = "labeled",
         source: str = "..",
         overlaps: str = "error",
+        output: Optional[str] = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -226,6 +229,7 @@ class MaskSaver:
         self.plate = plate
         self.plate_path = Optional[str]
         self.overlaps = overlaps
+        self.output = output
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -306,13 +310,16 @@ class MaskSaver:
             source_image = f"{source_image}/{self.plate_path}"
 
         print(f"source_image {source_image}")
-        src = parse_url(source_image)
-        assert src, "Source image does not exist"
+        image_path = source_image
+        if self.output:
+            image_path = os.path.join(self.output, source_image)
+        src = parse_url(image_path)
+        assert src, f"Source image does not exist at {image_path}"
         input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        store = open_store(filename)
+        store = open_store(image_path)
         root = open_group(store)
 
         if self.plate:
