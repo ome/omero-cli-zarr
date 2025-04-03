@@ -57,5 +57,5 @@ setup(
     url="https://github.com/ome/omero-cli-zarr/",
     setup_requires=["setuptools_scm==7.1.0"],
     use_scm_version={"write_to": "src/omero_zarr/_version.py"},
-    tests_require=["omero-py>=5.18.0", "pytest"],
+    tests_require=["omero-py>=5.18.0", "pytest", "omero-rois"],
 )
