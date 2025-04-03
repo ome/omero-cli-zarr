@@ -26,6 +26,8 @@ from omero.model import RoiI
 from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
 
+from .omero_rois import mask_from_binary_image
+
 
 class TestRender(AbstractCLITest):
 
@@ -117,7 +119,6 @@ class TestRender(AbstractCLITest):
         size_xy = 512
 
         # Create a mask
-        from omero_rois.library import mask_from_binary_image
         from skimage.data import binary_blobs
 
         blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
