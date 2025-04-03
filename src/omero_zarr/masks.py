@@ -282,13 +282,14 @@ class MaskSaver:
         # Figure out whether we can flatten some dimensions
         unique_dims: Dict[str, Set[int]] = {
             "T": {unwrap(mask.theT) for shapes in masks for mask in shapes},
-            "C": {unwrap(mask.theC) for shapes in masks for mask in shapes},
             "Z": {unwrap(mask.theZ) for shapes in masks for mask in shapes},
         }
         ignored_dimensions: Set[str] = set()
+        # We always ignore the C dimension
+        ignored_dimensions.add("C")
         print(f"Unique dimensions: {unique_dims}")
 
-        for d in "TCZ":
+        for d in "TZ":
             if unique_dims[d] == {None}:
                 ignored_dimensions.add(d)
 
@@ -328,9 +329,10 @@ class MaskSaver:
             label_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
+        mask_shape: Tuple[int, ...] = tuple(_mask_shape)
         for d in ignored_dimensions:
             _mask_shape[DIMENSION_ORDER[d]] = 1
-            mask_shape: Tuple[int, ...] = tuple(_mask_shape)
+            mask_shape = tuple(_mask_shape)
         del _mask_shape
         print(f"Ignoring dimensions {ignored_dimensions}")
 
