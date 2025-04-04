@@ -45,7 +45,7 @@ repos:
           - --autofix
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.0
+    rev: 7.2.0
     hooks:
       - id: flake8
         additional_dependencies: [
@@ -53,6 +53,7 @@ repos:
           flake8-builtins,
           flake8-rst-docstrings,
           flake8-logging-format,
+          setuptools,
         ]
         args: [
           # default black line length is 88
