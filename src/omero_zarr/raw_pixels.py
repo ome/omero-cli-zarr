@@ -55,12 +55,17 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     target_dir = args.output
     tile_width = args.tile_width
     tile_height = args.tile_height
+    ds_scale = None
+    if args.ds_scale:
+        ds_scale = [int(x) for x in args.ds_scale.split(",")]
 
     name = os.path.join(target_dir, "%s.zarr" % image.id)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
+    add_image(
+        image, root, tile_width=tile_width, tile_height=tile_height, ds_scale=ds_scale
+    )
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -71,6 +76,7 @@ def add_image(
     parent: Group,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    ds_scale: Optional[List[int]] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Returns the number of resolution levels generated for the image.
@@ -87,16 +93,16 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
+    paths = add_raw_image(image, parent, level_count, tile_width, tile_height, ds_scale)
 
     axes = marshal_axes(image)
-    transformations = marshal_transformations(image, len(paths))
+    transformations = marshal_transformations(image, len(paths), ds_scale)
 
     datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, datasets, axes=axes)
+    write_multiscales_metadata(parent, datasets, axes=axes, ds_scale=ds_scale)
 
     return (level_count, axes)
 
@@ -107,6 +113,7 @@ def add_raw_image(
     level_count: int,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    ds_scale: Optional[List[int]] = None,
 ) -> List[str]:
     pixels = image.getPrimaryPixels()
     omero_dtype = image.getPixelsType()
@@ -198,14 +205,18 @@ def add_raw_image(
 
     paths = [str(level) for level in range(level_count)]
 
-    downsample_pyramid_on_disk(parent, paths)
+    downsample_pyramid_on_disk(parent, paths, ds_scale)
     return paths
 
 
-def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
+def downsample_pyramid_on_disk(
+    parent: Group, paths: List[str], ds_scale: Optional[List[int]] = None
+) -> List[str]:
     """
     Takes a high-resolution Zarr array at paths[0] in the zarr group
-    and down-samples it by a factor of 2 for each of the other paths
+    and down-samples it by a factor of 2 for each of the other paths by default.
+    If ds_scale is provided, it will down-sample by the specified factor for each
+    dimension. e.g. [1, 1, 2, 2, 2]
     """
     group_path = parent.store.path
     image_path = os.path.join(group_path, parent.path)
@@ -219,10 +230,15 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
         path_to_array = os.path.join(image_path, paths[count])
         dask_image = da.from_zarr(path_to_array)
 
-        # resize in X and Y
         dims = list(dask_image.shape)
-        dims[-1] = dims[-1] // 2
-        dims[-2] = dims[-2] // 2
+        # downsample as specified...
+        if ds_scale is not None:
+            for dim, dim_scale in enumerate(ds_scale):
+                dims[dim] = dims[dim] // dim_scale
+        else:
+            # resize in X and Y by default
+            dims[-1] = dims[-1] // 2
+            dims[-2] = dims[-2] // 2
         output = da_resize(
             dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
         )

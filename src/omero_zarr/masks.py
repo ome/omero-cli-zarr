@@ -22,21 +22,22 @@ import re
 import time
 from collections import defaultdict
 from fileinput import input as finput
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import omero.clients  # noqa
 from ome_zarr.conversions import int_to_rgba_255
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Multiscales, Node
-from ome_zarr.scale import Scaler
 from ome_zarr.types import JSONDict
-from ome_zarr.writer import write_multiscale_labels
+from ome_zarr.writer import write_multiscales_metadata
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
+from zarr.convenience import save_array
 from zarr.hierarchy import open_group
 
+from .raw_pixels import downsample_pyramid_on_disk
 from .util import marshal_axes, marshal_transformations, open_store, print_status
 
 LOGGER = logging.getLogger("omero_zarr.masks")
@@ -184,6 +185,7 @@ def image_shapes_to_zarr(
             args.style,
             args.source_image,
             args.overlaps,
+            args.ds_scale,
         )
 
         if args.style == "split":
@@ -218,10 +220,13 @@ class MaskSaver:
         style: str = "labeled",
         source: str = "..",
         overlaps: str = "error",
+        ds_scale: Union[str, None] = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
         self.style = style
+        if ds_scale is not None:
+            self.ds_scale = [int(scale) for scale in ds_scale.split(",")]
         self.source_image = source
         self.plate = plate
         self.plate_path = Optional[str]
@@ -310,15 +315,14 @@ class MaskSaver:
         assert src, "Source image does not exist"
         input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
-        input_pyramid_levels = len(input_pyramid.data)
 
         store = open_store(filename)
         root = open_group(store)
 
         if self.plate:
-            label_group = root.require_group(self.plate_path)
+            labels_group = root.require_group(self.plate_path)
         else:
-            label_group = root
+            labels_group = root.require_group("labels")
 
         _mask_shape: List[int] = list(self.image_shape)
         for d in ignored_dimensions:
@@ -347,10 +351,6 @@ class MaskSaver:
                 dims_to_squeeze.append(dim)
         labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
 
-        scaler = Scaler(max_layer=input_pyramid_levels)
-        label_pyramid = scaler.nearest(labels)
-        transformations = marshal_transformations(self.image, levels=len(label_pyramid))
-
         # Specify and store metadata
         image_label_colors: List[JSONDict] = []
         label_properties: List[JSONDict] = []
@@ -369,13 +369,32 @@ class MaskSaver:
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
 
-        write_multiscale_labels(
-            label_pyramid,
-            label_group,
-            name,
-            axes=axes,
-            coordinate_transformations=transformations,
-            label_metadata=image_label,
+        # Target size for smallest multiresolution
+        TARGET_SIZE = 96
+        level_count = 1
+        longest = max(self.image_shape[-1], self.image_shape[-2])
+        while longest > TARGET_SIZE:
+            longest = longest // 2
+            level_count += 1
+        paths = [str(level) for level in range(level_count)]
+
+        axes = marshal_axes(self.image)
+        transformations = marshal_transformations(self.image, len(paths), self.ds_scale)
+
+        datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
+        for dataset, transform in zip(datasets, transformations):
+            dataset["coordinateTransformations"] = transform
+
+        label_group = labels_group.require_group("0")
+        labels_group.attrs["labels"] = ["0"]
+        save_array(store, labels, path="labels/0/0")
+
+        label_group.attrs["image-label"] = image_label
+
+        downsample_pyramid_on_disk(label_group, paths, ds_scale=self.ds_scale)
+
+        write_multiscales_metadata(
+            label_group, datasets, axes=axes, ds_scale=self.ds_scale
         )
 
     def shape_to_binim_yx(
