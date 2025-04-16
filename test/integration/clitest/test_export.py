@@ -24,9 +24,8 @@ from pathlib import Path
 import pytest
 from omero.model import RoiI
 from omero.testlib.cli import AbstractCLITest
+from omero_rois import mask_from_binary_image
 from omero_zarr.cli import ZarrControl
-
-from .omero_rois import mask_from_binary_image
 
 
 class TestRender(AbstractCLITest):
