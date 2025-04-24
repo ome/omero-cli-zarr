@@ -20,18 +20,16 @@ import argparse
 import math
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import dask.array as da
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
-from ome_zarr.dask_utils import resize as da_resize
-from ome_zarr.writer import (
-    write_multiscales_metadata,
-    write_plate_metadata,
-    write_well_metadata,
-)
+from ome_zarr_models.v04.coordinate_transformations import VectorScale
+from ome_zarr_models.v04.image import ImageAttrs
+from ome_zarr_models.v04.multiscales import Dataset, Multiscale
 from omero.model import Channel
 from omero.model.enums import (
     PixelsTypedouble,
@@ -49,6 +47,7 @@ from zarr.hierarchy import Group, open_group
 from . import __version__
 from . import ngff_version as VERSION
 from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .util import resize as da_resize
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
@@ -89,14 +88,25 @@ def add_image(
 
     paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
 
+    # create the image metadata
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
 
-    datasets: List[Dict[Any, Any]] = [{"path": path} for path in paths]
-    for dataset, transform in zip(datasets, transformations):
-        dataset["coordinateTransformations"] = transform
+    ds_models = []
+    for path, transform in zip(paths, transformations):
+        transforms_dset = (VectorScale.build(transform[0]["scale"]),)
+        ds_models.append(Dataset(path=path, coordinateTransformations=transforms_dset))
 
-    write_multiscales_metadata(parent, datasets, axes=axes)
+    multi = Multiscale(
+        axes=axes, datasets=tuple(ds_models), version="0.4", name=image.name
+    )
+    image = ImageAttrs(
+        multiscales=[multi],
+    )
+
+    # populate the zarr group with the image metadata (only "multiscales")
+    for k, v in image.model_dump(exclude_none=True).items():
+        parent.attrs[k] = v
 
     return (level_count, axes)
 
@@ -290,10 +300,20 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     # sort by row then column...
     wells = sorted(wells, key=lambda x: (x.row, x.column))
 
+    well_list = []
+    fields_by_acq_well: dict[int, dict] = defaultdict(lambda: defaultdict(set))
+
     for well in wells:
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
         fields = []
+        well_list.append(
+            {
+                "path": f"{row}/{col}",
+                "rowIndex": well.row,
+                "columnIndex": well.column,
+            }
+        )
         for field in range(n_fields[0], n_fields[1] + 1):
             ws = well.getWellSample(field)
             if ws and ws.getImage():
@@ -305,6 +325,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 field_info = {"path": f"{field_name}"}
                 if ac:
                     field_info["acquisition"] = ac.id
+                    fields_by_acq_well[ac.id][well.id].add(field)
                 fields.append(field_info)
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
@@ -312,20 +333,26 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 add_image(img, field_group)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
-                write_well_metadata(col_group, fields)
+                # write_well_metadata(col_group, fields)
+                col_group.attrs["well"] = fields
                 max_fields = max(max_fields, field + 1)
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
-        write_plate_metadata(
-            root,
-            row_names,
-            col_names,
-            wells=list(well_paths),
-            field_count=max_fields,
-            acquisitions=plate_acq,
-            name=plate.name,
-        )
+        plate_data: dict[str, Union[str, int, list[dict]]] = {
+            "columns": [{"name": str(col)} for col in col_names],
+            "rows": [{"name": str(row)} for row in row_names],
+            "wells": well_list,
+            "version": "0.4",
+            "name": plate.name,
+            "field_count": max_fields,
+        }
+        if plate_acq is not None:
+            for acq in plate_acq:
+                fcounts = [len(f) for f in fields_by_acq_well[acq["id"]].values()]
+                acq["maximumfieldcount"] = max(fcounts)
+            plate_data["acquisitions"] = plate_acq
+        root.attrs["plate"] = plate_data
 
     add_toplevel_metadata(root)
     print("Finished.")
