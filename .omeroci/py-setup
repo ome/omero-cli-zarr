@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+. ${TARGET}/.omero/py-setup  # Run upstream setup
+pip install omero-rois
