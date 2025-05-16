@@ -227,7 +227,7 @@ class MaskSaver:
         self.style = style
         self.source_image = source
         self.plate = plate
-        self.plate_path = Optional[str]
+        self.plate_path: str | None = None
         self.overlaps = overlaps
         self.output = output
         if image:
