@@ -89,7 +89,7 @@ class Scaler:
         func = self.func
 
         store = open_store(output_directory)
-        base = zarr.open_array(input_array)
+        base = zarr.open_array(input_array)  # noqa
         pyramid = func(base)
 
         if self.labeled:
@@ -127,7 +127,7 @@ class Scaler:
         self, store: MutableMapping, base: np.ndarray, pyramid: list[np.ndarray]
     ) -> zarr.hierarchy.Group:
         """Create group and datasets."""
-        grp = zarr.group(store)
+        grp = zarr.group(store)  # noqa
         grp.create_dataset("base", data=base)
         series = []
         for i in range(len(pyramid)):
