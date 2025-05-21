@@ -4,18 +4,15 @@ Copied from ome-zarr-py
 See the :class:`~ome_zarr.scale.Scaler` class for details.
 """
 
-import inspect
 import logging
-from collections.abc import Callable, Iterator, MutableMapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Union
 
 import dask.array as da
 import numpy as np
-import zarr
 from skimage.transform import resize
 
-from .util import open_store
 from .util import resize as dask_resize
 
 LOGGER = logging.getLogger("ome_zarr.scale")
@@ -28,25 +25,13 @@ ArrayLike = Union[da.Array, np.ndarray]
 class Scaler:
     """Helper class for performing various types of downsampling.
 
-    A method can be chosen by name such as "nearest". All methods on this
-    that do not begin with "_" and not either "methods" or "scale" are valid
-    choices. These values can be returned by the
-    :func:`~ome_zarr.scale.Scaler.methods` method.
+    A method can be chosen by name such as "nearest".
 
     Attributes:
-        copy_metadata:
-            If `True`, copy Zarr attributes from the input array to the new group.
         downscale:
             Downscaling factor.
-        in_place:
-            Does not do anything.
-        labeled:
-            If `True`, check that the values in the downsampled levels are a subset
-            of the values found in the input array.
         max_layer:
             The maximum number of downsampled layers to create.
-        method:
-            Downsampling method
 
     >>> import numpy as np
     >>> data = np.zeros((1, 1, 1, 64, 64))
@@ -61,83 +46,8 @@ class Scaler:
     (1, 1, 1, 4, 4)
     """
 
-    copy_metadata: bool = False
     downscale: int = 2
-    in_place: bool = False
-    labeled: bool = False
     max_layer: int = 4
-    method: str = "nearest"
-
-    @staticmethod
-    def methods() -> Iterator[str]:
-        """Return the name of all methods which define a downsampling.
-
-        Any of the returned values can be used as the `methods`
-        argument to the
-        :func:`Scaler constructor <ome_zarr.scale.Scaler._init__>`
-        """
-        funcs = inspect.getmembers(Scaler, predicate=inspect.isfunction)
-        for name, func in funcs:
-            if name in ("methods", "scale"):
-                continue
-            if name.startswith("_"):
-                continue
-            yield name
-
-    def scale(self, input_array: str, output_directory: str) -> None:
-        """Perform downsampling to disk."""
-        func = self.func
-
-        store = open_store(output_directory)
-        base = zarr.open_array(input_array)  # noqa
-        pyramid = func(base)
-
-        if self.labeled:
-            self.__assert_values(pyramid)
-
-        grp = self.__create_group(store, base, pyramid)
-
-        if self.copy_metadata:
-            print(f"copying attribute keys: {list(base.attrs.keys())}")
-            grp.attrs.update(base.attrs)
-
-    @property
-    def func(self) -> Callable[[np.ndarray], list[np.ndarray]]:
-        """Get downsample function."""
-        func = getattr(self, self.method, None)
-        if not func:
-            raise Exception
-        return func
-
-    def __assert_values(self, pyramid: list[np.ndarray]) -> None:
-        """Check for a single unique set of values for all pyramid levels."""
-        expected = set(np.unique(pyramid[0]))
-        print(f"level 0 {pyramid[0].shape} = {len(expected)} labels")
-        for i in range(1, len(pyramid)):
-            level = pyramid[i]
-            print(f"level {i}", pyramid[i].shape, len(expected))
-            found = set(np.unique(level))
-            if not expected.issuperset(found):
-                raise Exception(
-                    f"{len(found)} found values are not "
-                    "a subset of {len(expected)} values"
-                )
-
-    def __create_group(
-        self, store: MutableMapping, base: np.ndarray, pyramid: list[np.ndarray]
-    ) -> zarr.hierarchy.Group:
-        """Create group and datasets."""
-        grp = zarr.group(store)  # noqa
-        grp.create_dataset("base", data=base)
-        series = []
-        for i in range(len(pyramid)):
-            if i == 0:
-                path = "base"
-            else:
-                path = str(i)
-                grp.create_dataset(path, data=pyramid[i])
-            series.append({"path": path})
-        return grp
 
     def resize_image(self, image: ArrayLike) -> ArrayLike:
         """
