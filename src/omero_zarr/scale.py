@@ -6,7 +6,6 @@ See the :class:`~ome_zarr.scale.Scaler` class for details.
 
 import inspect
 import logging
-import os
 from collections.abc import Callable, Iterator, MutableMapping
 from dataclasses import dataclass
 from typing import Any, Union
@@ -14,16 +13,10 @@ from typing import Any, Union
 import dask.array as da
 import numpy as np
 import zarr
-from scipy.ndimage import zoom
-from skimage.transform import (
-    downscale_local_mean,
-    pyramid_gaussian,
-    pyramid_laplacian,
-    resize,
-)
+from skimage.transform import resize
 
-from .dask_utils import resize as dask_resize
-from .io import parse_url
+from .util import open_store
+from .util import resize as dask_resize
 
 LOGGER = logging.getLogger("ome_zarr.scale")
 
@@ -95,7 +88,7 @@ class Scaler:
         """Perform downsampling to disk."""
         func = self.func
 
-        store = self.__check_store(output_directory)
+        store = open_store(output_directory)
         base = zarr.open_array(input_array)
         pyramid = func(base)
 
@@ -115,13 +108,6 @@ class Scaler:
         if not func:
             raise Exception
         return func
-
-    def __check_store(self, output_directory: str) -> MutableMapping:
-        """Return a Zarr store if it doesn't already exist."""
-        assert not os.path.exists(output_directory)
-        loc = parse_url(output_directory, mode="w")
-        assert loc
-        return loc.store
 
     def __assert_values(self, pyramid: list[np.ndarray]) -> None:
         """Check for a single unique set of values for all pyramid levels."""
@@ -202,47 +188,6 @@ class Scaler:
             preserve_range=True,
             anti_aliasing=False,
         ).astype(plane.dtype)
-
-    def gaussian(self, base: np.ndarray) -> list[np.ndarray]:
-        """Downsample using :func:`skimage.transform.pyramid_gaussian`."""
-        return list(
-            pyramid_gaussian(
-                base,
-                downscale=self.downscale,
-                max_layer=self.max_layer,
-                multichannel=False,
-            )
-        )
-
-    def laplacian(self, base: np.ndarray) -> list[np.ndarray]:
-        """Downsample using :func:`skimage.transform.pyramid_laplacian`."""
-        return list(
-            pyramid_laplacian(
-                base,
-                downscale=self.downscale,
-                max_layer=self.max_layer,
-                multichannel=False,
-            )
-        )
-
-    def local_mean(self, base: np.ndarray) -> list[np.ndarray]:
-        """Downsample using :func:`skimage.transform.downscale_local_mean`."""
-        rv = [base]
-        stack_dims = base.ndim - 2
-        factors = (*(1,) * stack_dims, *(self.downscale, self.downscale))
-        for i in range(self.max_layer):
-            rv.append(downscale_local_mean(rv[-1], factors=factors).astype(base.dtype))
-        return rv
-
-    def zoom(self, base: np.ndarray) -> list[np.ndarray]:
-        """Downsample using :func:`scipy.ndimage.zoom`."""
-        rv = [base]
-        print(base.shape)
-        for i in range(self.max_layer):
-            print(i, self.downscale)
-            rv.append(zoom(base, self.downscale**i))
-            print(rv[-1].shape)
-        return list(reversed(rv))
 
     #
     # Helpers
