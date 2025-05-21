@@ -23,22 +23,25 @@ import re
 import time
 from collections import defaultdict
 from fileinput import input as finput
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import omero.clients  # noqa
-from ome_zarr.conversions import int_to_rgba_255
-from ome_zarr.io import parse_url
-from ome_zarr.reader import Multiscales, Node
-from ome_zarr.scale import Scaler
-from ome_zarr.types import JSONDict
-from ome_zarr.writer import write_multiscale_labels
+
+# FIXME: from ome_zarr.writer import write_multiscale_labels
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .scale import Scaler
+from .util import (
+    int_to_rgba_255,
+    marshal_axes,
+    marshal_transformations,
+    open_store,
+    print_status,
+)
 
 LOGGER = logging.getLogger("omero_zarr.masks")
 
@@ -314,14 +317,20 @@ class MaskSaver:
         image_path = source_image
         if self.output:
             image_path = os.path.join(self.output, source_image)
-        src = parse_url(image_path)
-        assert src, f"Source image does not exist at {image_path}"
-        input_pyramid = Node(src, [])
-        assert input_pyramid.load(Multiscales), "No multiscales metadata found"
-        input_pyramid_levels = len(input_pyramid.data)
-
+        assert os.path.exists(
+            image_path
+        ), f"Source image does not exist at {image_path}"
         store = open_store(image_path)
         root = open_group(store)
+        print("root", root)
+        root_attrs = root.attrs
+        print("root.attrs", root_attrs)
+        # we know we're working with v0.4 here...
+        ds = root_attrs.get("multiscales", [{}])[0].get("datasets")
+        # assert src, f"Source image does not exist at {image_path}"
+        # input_pyramid = Node(src, [])
+        assert ds is not None, "No multiscales metadata found"
+        input_pyramid_levels = len(ds)
 
         if self.plate:
             label_group = root.require_group(self.plate_path)
@@ -361,8 +370,8 @@ class MaskSaver:
         transformations = marshal_transformations(self.image, levels=len(label_pyramid))
 
         # Specify and store metadata
-        image_label_colors: List[JSONDict] = []
-        label_properties: List[JSONDict] = []
+        image_label_colors: List[dict[str, Any]] = []
+        label_properties: List[dict[str, Any]] = []
         image_label = {
             "colors": image_label_colors,
             "properties": label_properties,
@@ -378,14 +387,19 @@ class MaskSaver:
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
 
-        write_multiscale_labels(
-            label_pyramid,
-            label_group,
-            name,
-            axes=axes,
-            coordinate_transformations=transformations,
-            label_metadata=image_label,
-        )
+        print("axes", axes)
+        print("transformations", transformations)
+        print("label_pyramid", label_pyramid)
+        print("label_group", label_group)
+        print("image_label", image_label)
+        # write_multiscale_labels(
+        #     label_pyramid,
+        #     label_group,
+        #     name,
+        #     axes=axes,
+        #     coordinate_transformations=transformations,
+        #     label_metadata=image_label,
+        # )
 
     def shape_to_binim_yx(
         self, shape: omero.model.Shape
@@ -474,7 +488,7 @@ class MaskSaver:
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Optional[Set[str]] = None,
         check_overlaps: Optional[bool] = None,
-    ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
+    ) -> Tuple[np.ndarray, Dict[int, int], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
@@ -534,7 +548,7 @@ class MaskSaver:
                 labels.shape == mask_shape
             ), f"Invalid label shape: {labels.shape}, expected {mask_shape}"
 
-        fillColors: Dict[int, str] = {}
+        fillColors: Dict[int, int] = {}
         properties: Dict[int, Dict] = {}
 
         for count, shapes in enumerate(masks):

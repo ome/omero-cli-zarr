@@ -185,3 +185,13 @@ def resize(
         resize_block, image_prepared, dtype=image.dtype, chunks=block_output_shape
     )[output_slices]
     return output.rechunk(image.chunksize).astype(image.dtype)
+
+
+def int_to_rgba_255(v: int) -> list[int]:
+    """Get rgba (0-255) from integer.
+    >>> print(int_to_rgba_255(0))
+    [0, 0, 0, 0]
+    >>> print([round(x, 3) for x in int_to_rgba_255(100100)])
+    [0, 1, 135, 4]
+    """
+    return list(v.to_bytes(4, signed=True, byteorder="big"))
