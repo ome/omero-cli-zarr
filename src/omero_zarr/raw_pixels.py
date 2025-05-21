@@ -95,7 +95,7 @@ def add_image(
     # write_multiscales_metadata(parent, datasets, axes=axes)
     multiscales = [
         {
-            "version": "0.4",
+            "version": VERSION,
             "datasets": datasets,
             "name": image.name,
             "axes": axes,
@@ -338,7 +338,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             "columns": [{"name": str(col)} for col in col_names],
             "rows": [{"name": str(row)} for row in row_names],
             "wells": well_list,
-            "version": "0.4",
+            "version": VERSION,
             "name": plate.name,
             "field_count": max_fields,
         }
