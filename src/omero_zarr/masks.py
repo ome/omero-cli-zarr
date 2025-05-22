@@ -367,13 +367,14 @@ class MaskSaver:
         # and write the image there...
         # we only downscale in X and Y
         # scale_factors needs to include all "spatial" dimensions
+        # NB: ngff-zarr does NOT scale below the chunk size. Problem if we
+        # use 1024 chunks but want to scale down to thumbnail size
         scale_factors = [
             {"x": 2**n, "y": 2**n, "z": 1} for n in range(1, input_pyramid_levels)
         ]
         print(f"scale_factors {scale_factors}")
         print("labels", labels)
 
-        # FIXME: down-sampled labels are all black!
         # FIXME: specify axes info
         multiscale_labels = nz.to_multiscales(
             labels,
