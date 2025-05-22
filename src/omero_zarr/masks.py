@@ -25,6 +25,8 @@ from collections import defaultdict
 from fileinput import input as finput
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+# from .scale import Scaler
+import ngff_zarr as nz
 import numpy as np
 import omero.clients  # noqa
 
@@ -34,14 +36,7 @@ from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from .scale import Scaler
-from .util import (
-    int_to_rgba_255,
-    marshal_axes,
-    marshal_transformations,
-    open_store,
-    print_status,
-)
+from .util import int_to_rgba_255, open_store, print_status
 
 LOGGER = logging.getLogger("omero_zarr.masks")
 
@@ -320,6 +315,8 @@ class MaskSaver:
         assert os.path.exists(
             image_path
         ), f"Source image does not exist at {image_path}"
+
+        # We inspect the image to find out how many levels we have
         store = open_store(image_path)
         root = open_group(store)
         print("root", root)
@@ -333,9 +330,9 @@ class MaskSaver:
         input_pyramid_levels = len(ds)
 
         if self.plate:
-            label_group = root.require_group(self.plate_path)
+            image_group = root.require_group(self.plate_path)
         else:
-            label_group = root
+            image_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
         mask_shape: Tuple[int, ...] = tuple(_mask_shape)
@@ -355,21 +352,41 @@ class MaskSaver:
             ignored_dimensions,
         )
 
-        axes = marshal_axes(self.image)
+        # axes = marshal_axes(self.image)
 
         # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
         dims_to_squeeze = []
-        for dim, size in enumerate(self.image_shape):
+        # FIXME: this ensures we don't end up with ANY dims of size=1
+        # which causes ngff-zarr downsampling to fail
+        # BUT we should support size=1 if that's what the Image has
+        # for dim, size in enumerate(self.image_shape):
+        for dim, size in enumerate(mask_shape):
             if size == 1:
                 dims_to_squeeze.append(dim)
         labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
 
-        scaler = Scaler(max_layer=input_pyramid_levels)
-        label_pyramid = scaler.nearest(labels)
-        transformations = marshal_transformations(self.image, levels=len(label_pyramid))
+        # ngff-zarr (don't support "labels" directly...)
+        # we create the labels group etc...
+        labels_group = image_group.require_group("labels")
+        labels_group.attrs["labels"] = [name]
+        # and write the image there...
+        scale_factors = [2**n for n in range(1, input_pyramid_levels)]
+        print(f"scale_factors {scale_factors}")
+        print("labels", labels)
 
-        # Specify and store metadata
+        # FIXME: down-sampled labels are all black!
+        # FIXME: specify axes info
+        multiscale_labels = nz.to_multiscales(
+            labels,
+            scale_factors=scale_factors,
+            chunks=64,
+            method=nz.Methods.ITKWASM_LABEL_IMAGE,
+        )
+        labels_path = os.path.join(image_path, "labels", name)
+        nz.to_ngff_zarr(labels_path, multiscale_labels, version="0.4")
+
+        # Specify and store image-label metadata
         image_label_colors: List[dict[str, Any]] = []
         label_properties: List[dict[str, Any]] = []
         image_label = {
@@ -386,20 +403,8 @@ class MaskSaver:
                 image_label_colors.append(
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
-
-        print("axes", axes)
-        print("transformations", transformations)
-        print("label_pyramid", label_pyramid)
-        print("label_group", label_group)
-        print("image_label", image_label)
-        # write_multiscale_labels(
-        #     label_pyramid,
-        #     label_group,
-        #     name,
-        #     axes=axes,
-        #     coordinate_transformations=transformations,
-        #     label_metadata=image_label,
-        # )
+        labels_image_group = labels_group.require_group(name)
+        labels_image_group.attrs["image-label"] = image_label
 
     def shape_to_binim_yx(
         self, shape: omero.model.Shape
