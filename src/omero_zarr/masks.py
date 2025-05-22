@@ -352,16 +352,10 @@ class MaskSaver:
             ignored_dimensions,
         )
 
-        # axes = marshal_axes(self.image)
-
         # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
         dims_to_squeeze = []
-        # FIXME: this ensures we don't end up with ANY dims of size=1
-        # which causes ngff-zarr downsampling to fail
-        # BUT we should support size=1 if that's what the Image has
-        # for dim, size in enumerate(self.image_shape):
-        for dim, size in enumerate(mask_shape):
+        for dim, size in enumerate(self.image_shape):
             if size == 1:
                 dims_to_squeeze.append(dim)
         labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
@@ -371,7 +365,11 @@ class MaskSaver:
         labels_group = image_group.require_group("labels")
         labels_group.attrs["labels"] = [name]
         # and write the image there...
-        scale_factors = [2**n for n in range(1, input_pyramid_levels)]
+        # we only downscale in X and Y
+        # scale_factors needs to include all "spatial" dimensions
+        scale_factors = [
+            {"x": 2**n, "y": 2**n, "z": 1} for n in range(1, input_pyramid_levels)
+        ]
         print(f"scale_factors {scale_factors}")
         print("labels", labels)
 
