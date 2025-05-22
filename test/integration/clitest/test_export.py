@@ -159,8 +159,9 @@ class TestRender(AbstractCLITest):
         labels_json = json.loads(labels_text)
         assert labels_json["image-label"]["colors"] == [{"label-value": 1, "rgba": red}]
 
+        path0 = labels_json["multiscales"][0]["datasets"][0]["path"]
         arr_text = (
-            tmp_path / f"{img_id}.zarr" / "labels" / "0" / "0" / ".zarray"
+            tmp_path / f"{img_id}.zarr" / "labels" / "0" / path0 / ".zarray"
         ).read_text(encoding="utf-8")
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [1, 512, 512]

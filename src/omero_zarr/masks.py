@@ -23,22 +23,20 @@ import re
 import time
 from collections import defaultdict
 from fileinput import input as finput
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+# from .scale import Scaler
+import ngff_zarr as nz
 import numpy as np
 import omero.clients  # noqa
-from ome_zarr.conversions import int_to_rgba_255
-from ome_zarr.io import parse_url
-from ome_zarr.reader import Multiscales, Node
-from ome_zarr.scale import Scaler
-from ome_zarr.types import JSONDict
-from ome_zarr.writer import write_multiscale_labels
+
+# FIXME: from ome_zarr.writer import write_multiscale_labels
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .util import int_to_rgba_255, open_store, print_status
 
 LOGGER = logging.getLogger("omero_zarr.masks")
 
@@ -314,19 +312,27 @@ class MaskSaver:
         image_path = source_image
         if self.output:
             image_path = os.path.join(self.output, source_image)
-        src = parse_url(image_path)
-        assert src, f"Source image does not exist at {image_path}"
-        input_pyramid = Node(src, [])
-        assert input_pyramid.load(Multiscales), "No multiscales metadata found"
-        input_pyramid_levels = len(input_pyramid.data)
+        assert os.path.exists(
+            image_path
+        ), f"Source image does not exist at {image_path}"
 
+        # We inspect the image to find out how many levels we have
         store = open_store(image_path)
         root = open_group(store)
+        print("root", root)
+        root_attrs = root.attrs
+        print("root.attrs", root_attrs)
+        # we know we're working with v0.4 here...
+        ds = root_attrs.get("multiscales", [{}])[0].get("datasets")
+        # assert src, f"Source image does not exist at {image_path}"
+        # input_pyramid = Node(src, [])
+        assert ds is not None, "No multiscales metadata found"
+        input_pyramid_levels = len(ds)
 
         if self.plate:
-            label_group = root.require_group(self.plate_path)
+            image_group = root.require_group(self.plate_path)
         else:
-            label_group = root
+            image_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
         mask_shape: Tuple[int, ...] = tuple(_mask_shape)
@@ -346,8 +352,6 @@ class MaskSaver:
             ignored_dimensions,
         )
 
-        axes = marshal_axes(self.image)
-
         # For v0.3+ ngff we want to reduce the number of dimensions to
         # match the dims of the Image.
         dims_to_squeeze = []
@@ -356,13 +360,34 @@ class MaskSaver:
                 dims_to_squeeze.append(dim)
         labels = np.squeeze(labels, axis=tuple(dims_to_squeeze))
 
-        scaler = Scaler(max_layer=input_pyramid_levels)
-        label_pyramid = scaler.nearest(labels)
-        transformations = marshal_transformations(self.image, levels=len(label_pyramid))
+        # ngff-zarr (don't support "labels" directly...)
+        # we create the labels group etc...
+        labels_group = image_group.require_group("labels")
+        labels_group.attrs["labels"] = [name]
+        # and write the image there...
+        # we only downscale in X and Y
+        # scale_factors needs to include all "spatial" dimensions
+        # NB: ngff-zarr does NOT scale below the chunk size. Problem if we
+        # use 1024 chunks but want to scale down to thumbnail size
+        scale_factors = [
+            {"x": 2**n, "y": 2**n, "z": 1} for n in range(1, input_pyramid_levels)
+        ]
+        print(f"scale_factors {scale_factors}")
+        print("labels", labels)
 
-        # Specify and store metadata
-        image_label_colors: List[JSONDict] = []
-        label_properties: List[JSONDict] = []
+        # FIXME: specify axes info
+        multiscale_labels = nz.to_multiscales(
+            labels,
+            scale_factors=scale_factors,
+            chunks=64,
+            method=nz.Methods.ITKWASM_LABEL_IMAGE,
+        )
+        labels_path = os.path.join(image_path, "labels", name)
+        nz.to_ngff_zarr(labels_path, multiscale_labels, version="0.4")
+
+        # Specify and store image-label metadata
+        image_label_colors: List[dict[str, Any]] = []
+        label_properties: List[dict[str, Any]] = []
         image_label = {
             "colors": image_label_colors,
             "properties": label_properties,
@@ -377,15 +402,8 @@ class MaskSaver:
                 image_label_colors.append(
                     {"label-value": label_value, "rgba": int_to_rgba_255(rgba_int)}
                 )
-
-        write_multiscale_labels(
-            label_pyramid,
-            label_group,
-            name,
-            axes=axes,
-            coordinate_transformations=transformations,
-            label_metadata=image_label,
-        )
+        labels_image_group = labels_group.require_group(name)
+        labels_image_group.attrs["image-label"] = image_label
 
     def shape_to_binim_yx(
         self, shape: omero.model.Shape
@@ -474,7 +492,7 @@ class MaskSaver:
         mask_shape: Tuple[int, ...],
         ignored_dimensions: Optional[Set[str]] = None,
         check_overlaps: Optional[bool] = None,
-    ) -> Tuple[np.ndarray, Dict[int, str], Dict[int, Dict]]:
+    ) -> Tuple[np.ndarray, Dict[int, int], Dict[int, Dict]]:
         """
         :param masks [MaskI]: Iterable container of OMERO masks
         :param mask_shape 5-tuple: the image dimensions (T, C, Z, Y, X), taking
@@ -534,7 +552,7 @@ class MaskSaver:
                 labels.shape == mask_shape
             ), f"Invalid label shape: {labels.shape}, expected {mask_shape}"
 
-        fillColors: Dict[int, str] = {}
+        fillColors: Dict[int, int] = {}
         properties: Dict[int, Dict] = {}
 
         for count, shapes in enumerate(masks):
