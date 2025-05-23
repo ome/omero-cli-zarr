@@ -29,6 +29,7 @@ from omero.model import ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .extinfo import external_info_str, get_extinfo, get_images, set_external_info
 from .masks import (
     MASK_DTYPE_SIZE,
     MaskSaver,
@@ -40,12 +41,6 @@ from .raw_pixels import (
     add_toplevel_metadata,
     image_to_zarr,
     plate_to_zarr,
-)
-from .extinfo import (
-    get_images,
-    set_external_info,
-    get_extinfo,
-    external_info_str
 )
 
 HELP = """Export data in zarr format.
@@ -205,8 +200,7 @@ class ZarrControl(BaseControl):
         polygons.add_argument(
             "--label-name",
             help=(
-                "Name of the array that will be stored. Ignored for "
-                "--style=split"
+                "Name of the array that will be stored. Ignored for " "--style=split"
             ),
             default="0",
         )
@@ -236,8 +230,7 @@ class ZarrControl(BaseControl):
         masks.add_argument(
             "--label-name",
             help=(
-                "Name of the array that will be stored. Ignored for "
-                "--style=split"
+                "Name of the array that will be stored. Ignored for " "--style=split"
             ),
             default="0",
         )
@@ -302,10 +295,7 @@ class ZarrControl(BaseControl):
         export.add_argument(
             "--max_workers",
             default=None,
-            help=(
-                "Maximum number of workers (only for "
-                "use with bioformats2raw)"
-            ),
+            help=("Maximum number of workers (only for " "use with bioformats2raw)"),
         )
         export.add_argument(
             "object",
@@ -428,8 +418,7 @@ class ZarrControl(BaseControl):
                         args.entityType,
                         int(args.entityId),
                     )
-                    img = self.gateway.getUpdateService()\
-                        .saveAndReturnObject(img)
+                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
                     self.ctx.out(
                         f"Set ExternalInfo for image ({img.id._val}) "
                         f"{img.name._val}:\n"
@@ -443,16 +432,14 @@ class ZarrControl(BaseControl):
             elif args.reset:
                 if extinfo:
                     img.details.externalInfo = None
-                    img = self.gateway.getUpdateService()\
-                        .saveAndReturnObject(img)
+                    img = self.gateway.getUpdateService().saveAndReturnObject(img)
                     self.ctx.out(
                         f"Removed ExternalInfo from image "
                         f"({img.id._val}) {img.name._val}"
                     )
                 else:
                     self.ctx.out(
-                        f"Image ({img.id._val}) {img.name._val} "
-                        "has no ExternalInfo"
+                        f"Image ({img.id._val}) {img.name._val} " "has no ExternalInfo"
                     )
             else:
                 if extinfo:
@@ -463,8 +450,7 @@ class ZarrControl(BaseControl):
                     )
                 else:
                     self.ctx.out(
-                        f"Image ({img.id._val}) {img.name._val} has no "
-                        "ExternalInfo"
+                        f"Image ({img.id._val}) {img.name._val} has no " "ExternalInfo"
                     )
 
     def _lookup(
@@ -477,9 +463,7 @@ class ZarrControl(BaseControl):
             self.ctx.die(110, f"No such {otype}: {oid}")
         return obj
 
-    def _bf_export(
-        self, image: BlitzObjectWrapper, args: argparse.Namespace
-    ) -> None:
+    def _bf_export(self, image: BlitzObjectWrapper, args: argparse.Namespace) -> None:
         if args.bfpath:
             abs_path = Path(args.bfpath)
         elif image.getInplaceImport():
