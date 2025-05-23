@@ -187,23 +187,27 @@ def set_external_info(
     else:
         path = _get_path(conn, img.id)
         if path.endswith("OME/METADATA.ome.xml"):
-            if well:
-                match = WELL_POS_RE.match(well)
-                if match:
-                    col = match.group("col")
-                    row = match.group("row")
-                    path = path.replace("OME/METADATA.ome.xml", f"{row}")
-                    path = f"/{path}/{col}/{idx}"
-                else:
-                    raise ValueError(f"Couldn't parse well position: {well}")
-            else:
-                series = img.getSeries()._val
-                path = path.replace("OME/METADATA.ome.xml", f"{series}")
-                path = f"/{path}"
+            spec = "OME/METADATA.ome.xml"
+        elif path.endswith(".fake"):
+            spec = path[path.rindex('/') + 1:]
         else:
             raise ValueError(
                 f"Doesn't seem to be an ome.zarr: {path}"
             )
+        if well:
+            match = WELL_POS_RE.match(well)
+            if match:
+                col = match.group("col")
+                row = match.group("row")
+                path = path.replace(spec, f"{row}")
+                path = f"/{path}/{col}/{idx}"
+            else:
+                raise ValueError(f"Couldn't parse well position: {well}")
+        else:
+            series = img.getSeries()._val
+            path = path.replace(spec, f"{series}")
+            path = f"/{path}"
+
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)
