@@ -27,6 +27,7 @@ import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from ome_zarr.dask_utils import resize as da_resize
+from ome_zarr.format import FormatV04
 from ome_zarr.writer import (
     write_multiscales_metadata,
     write_plate_metadata,
@@ -44,7 +45,7 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import unwrap
-from zarr.hierarchy import Group, open_group
+from zarr import Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
@@ -63,7 +64,7 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     name = get_zarr_name(image, args.output, args.name_by)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
-    root = open_group(store)
+    root = open_group(store, zarr_version=2)
     add_image(image, root, tile_width=tile_width, tile_height=tile_height)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
@@ -100,7 +101,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, datasets, axes=axes)
+    write_multiscales_metadata(parent, datasets, axes=axes, fmt=FormatV04())
 
     return (level_count, axes)
 
@@ -152,12 +153,13 @@ def add_raw_image(
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
     shape = tuple(dims + [size_y, size_x])
     chunks = tuple([1] * len(dims) + [tile_height, tile_width])
-    zarray = parent.require_dataset(
+    zarray = parent.require_array(
         path,
         shape=shape,
         exact=True,
         chunks=chunks,
         dtype=d_type,
+        chunk_key_encoding={"name": "v2", "separator": "/"},
     )
 
     # Need to be sure that dims match (if array already existed)
@@ -211,9 +213,9 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
     Takes a high-resolution Zarr array at paths[0] in the zarr group
     and down-samples it by a factor of 2 for each of the other paths
     """
-    group_path = parent.store.path
+    group_path = str(parent.store_path)
+    img_path = parent.store_path / parent.path
     image_path = os.path.join(group_path, parent.path)
-    print("downsample_pyramid_on_disk", image_path)
     for count, path in enumerate(paths[1:]):
         target_path = os.path.join(image_path, path)
         if os.path.exists(target_path):
@@ -234,9 +236,10 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
         # write to disk
         da.to_zarr(
             arr=output,
-            url=image_path,
+            url=img_path,
             component=path,
-            dimension_separator=parent._store._dimension_separator,
+            dimension_separator="/",
+            zarr_format=2,
         )
 
     return paths
