@@ -20,7 +20,7 @@ import time
 from typing import Dict, List
 
 from omero.gateway import ImageWrapper
-from zarr.storage import FSStore
+from zarr.storage import LocalStore
 
 
 def print_status(t0: int, t: int, count: int, total: int) -> None:
@@ -42,16 +42,13 @@ def print_status(t0: int, t: int, count: int, total: int) -> None:
     print(status, end="\r", flush=True)
 
 
-def open_store(name: str) -> FSStore:
+def open_store(name: str) -> LocalStore:
     """
-    Create an FSStore instance that supports nested storage of chunks.
+    Create an LocalStore instance that supports nested storage of chunks.
     """
-    return FSStore(
+    return LocalStore(
         name,
-        auto_mkdir=True,
-        key_separator="/",
-        normalize_keys=False,
-        mode="w",
+        read_only=False,
     )
 
 
