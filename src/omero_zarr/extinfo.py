@@ -155,7 +155,7 @@ def set_external_info(
     img: ImageI,
     well: str,
     idx: int,
-    lsid: str,
+    overwrite_path: str,
     entityType: str,
     entityId: int
 ) -> ImageI:
@@ -167,8 +167,8 @@ def set_external_info(
         img (ImageI): OMERO image
         well (str | None): Optional well position (e.g. 'A1')
         idx (int | None): Optional well sample / field index
-        lsid (str | None): Optional custom LSID path. If None, path is
-          derived from image's clientpath
+        overwrite_path (str | None): Optional custom path. If None, path is
+            derived from image's clientpath.
         entityType (str | None): Optional entity type. Defaults to
           'com.glencoesoftware.ngff:multiscales'
         entityId (int | None): Optional entity ID. Defaults to 3
@@ -184,29 +184,35 @@ def set_external_info(
         entityType = "com.glencoesoftware.ngff:multiscales"
     if not entityId:
         entityId = 3
-    if lsid:
-        path = lsid
+
+    img_path = _get_path(conn, img.id)
+    if overwrite_path:
+        if not overwrite_path.endswith("/"):
+            path = f"{overwrite_path}/"
+        else:
+            path = overwrite_path
     else:
-        path = _get_path(conn, img.id)
-        if METADATA_XML_RE.match(path):
-            metadata_xml = METADATA_XML_RE.match(path).group(1)
-            if well:
-                match = WELL_POS_RE.match(well)
-                if match:
-                    col = match.group("col")
-                    row = match.group("row")
-                    path = path.replace(metadata_xml, f"{row}")
-                    path = f"/{path}/{col}/{idx}"
-                else:
-                    raise ValueError(f"Couldn't parse well position: {well}")
-            else:
-                series = img.getSeries()._val
-                path = path.replace(metadata_xml, f"{series}")
-                path = f"/{path}"
+        if METADATA_XML_RE.match(img_path):
+            metadata_xml = METADATA_XML_RE.match(img_path).group(1)
+            path = img_path.replace(metadata_xml,"")
+            path = f"/{path}"
         else:
             raise ValueError(
-                f"Doesn't seem to be an ome.zarr: {path}"
+                f"Doesn't seem to be an ome.zarr: {img_path}"
             )
+
+    if well:
+        match = WELL_POS_RE.match(well)
+        if match:
+            col = match.group("col")
+            row = match.group("row")
+            path = f"{path}{row}/{col}/{idx}"
+        else:
+            raise ValueError(f"Couldn't parse well position: {well}")
+    else:
+        series = img.getSeries()._val
+        path = f"{path}{series}"
+
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)

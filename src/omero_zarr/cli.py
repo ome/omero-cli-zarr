@@ -325,10 +325,10 @@ class ZarrControl(BaseControl):
             help="Set the ExternalInfo path",
         )
         extinfo.add_argument(
-            "--lsid",
+            "--zarrPath",
             default=None,
             help=(
-                "Use a specific lsid (path) (default: Determine from "
+                "Use a specific path (default: Determine from "
                 "clientPath) (only used in combination with --set)"
             ),
         )
@@ -424,7 +424,7 @@ class ZarrControl(BaseControl):
                         img,
                         well,
                         idx,
-                        args.lsid,
+                        args.zarrPath,
                         args.entityType,
                         int(args.entityId),
                     )
