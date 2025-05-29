@@ -16,7 +16,9 @@ from omero_sys_ParametersI import ParametersI
 
 # Regex to match well positions (eg. A1)
 WELL_POS_RE = re.compile(r"(?P<row>\D+)(?P<col>\d+)")
-
+# Regex to match the metadata.xml (could be any xml under xyz.zarr/ directory,
+# not only xyz.zarr/OME/METADATA.ome.xml)
+METADATA_XML_RE = re.compile(r".+\.zarr\/(.+\.xml)")
 
 def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
     """
@@ -186,19 +188,20 @@ def set_external_info(
         path = lsid
     else:
         path = _get_path(conn, img.id)
-        if path.endswith("OME/METADATA.ome.xml"):
+        if METADATA_XML_RE.match(path):
+            metadata_xml = METADATA_XML_RE.match(path).group(1)
             if well:
                 match = WELL_POS_RE.match(well)
                 if match:
                     col = match.group("col")
                     row = match.group("row")
-                    path = path.replace("OME/METADATA.ome.xml", f"{row}")
+                    path = path.replace(metadata_xml, f"{row}")
                     path = f"/{path}/{col}/{idx}"
                 else:
                     raise ValueError(f"Couldn't parse well position: {well}")
             else:
                 series = img.getSeries()._val
-                path = path.replace("OME/METADATA.ome.xml", f"{series}")
+                path = path.replace(metadata_xml, f"{series}")
                 path = f"/{path}"
         else:
             raise ValueError(
