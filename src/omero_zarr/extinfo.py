@@ -1,24 +1,16 @@
 import re
 
 from omero.gateway import BlitzGateway, BlitzObjectWrapper, ImageWrapper
-from omero.model import (
-    Dataset,
-    ExternalInfoI,
-    Image,
-    ImageI,
-    Plate,
-    Project,
-    Screen,
-)
+from omero.model import Dataset, ExternalInfoI, Image, ImageI, Plate, Project, Screen
 from omero.rtypes import rlong, rstring
 from omero_sys_ParametersI import ParametersI
-
 
 # Regex to match well positions (eg. A1)
 WELL_POS_RE = re.compile(r"(?P<row>\D+)(?P<col>\d+)")
 # Regex to match the metadata.xml (could be any xml under xyz.zarr/ directory,
 # not only xyz.zarr/OME/METADATA.ome.xml)
 METADATA_XML_RE = re.compile(r".+\.zarr\/(.+\.xml)")
+
 
 def get_extinfo(conn: BlitzGateway, image: ImageWrapper) -> ExternalInfoI:
     """
@@ -157,7 +149,7 @@ def set_external_info(
     idx: int,
     overwrite_path: str,
     entityType: str,
-    entityId: int
+    entityId: int,
 ) -> ImageI:
     """
     Set the external info for an OMERO image.
@@ -194,12 +186,10 @@ def set_external_info(
     else:
         if METADATA_XML_RE.match(img_path):
             metadata_xml = METADATA_XML_RE.match(img_path).group(1)
-            path = img_path.replace(metadata_xml,"")
+            path = img_path.replace(metadata_xml, "")
             path = f"/{path}"
         else:
-            raise ValueError(
-                f"Doesn't seem to be an ome.zarr: {img_path}"
-            )
+            raise ValueError(f"Doesn't seem to be an ome.zarr: {img_path}")
 
     if well:
         match = WELL_POS_RE.match(well)
@@ -212,7 +202,6 @@ def set_external_info(
     else:
         series = img.getSeries()._val
         path = f"{path}{series}"
-
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)
