@@ -194,6 +194,15 @@ class ZarrControl(BaseControl):
             help=("Name of the array that will be stored. Ignored for --style=split"),
             default="0",
         )
+        polygons.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How the existing Image or Plate zarr is named. Default 'id' is "
+                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
+            ),
+        )
 
         masks = parser.add(sub, self.masks, MASKS_HELP)
         masks.add_argument(
@@ -242,6 +251,15 @@ class ZarrControl(BaseControl):
             help=(
                 "File in format: ID,NAME,ROI_ID which is used to separate "
                 "overlapping labels"
+            ),
+        )
+        masks.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How the existing Image or Plate zarr is named. Default 'id' is "
+                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
             ),
         )
 

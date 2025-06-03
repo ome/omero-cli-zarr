@@ -38,7 +38,13 @@ from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
-from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .util import (
+    get_zarr_name,
+    marshal_axes,
+    marshal_transformations,
+    open_store,
+    print_status,
+)
 
 LOGGER = logging.getLogger("omero_zarr.masks")
 
@@ -89,6 +95,7 @@ def plate_shapes_to_zarr(
         args.source_image,
         args.overlaps,
         args.output,
+        args.name_by,
     )
 
     count = 0
@@ -187,6 +194,7 @@ def image_shapes_to_zarr(
             args.source_image,
             args.overlaps,
             args.output,
+            args.name_by,
         )
 
         if args.style == "split":
@@ -222,6 +230,7 @@ class MaskSaver:
         source: str = "..",
         overlaps: str = "error",
         output: Optional[str] = None,
+        name_by: str = "id",
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -231,6 +240,7 @@ class MaskSaver:
         self.plate_path = Optional[str]
         self.overlaps = overlaps
         self.output = output
+        self.name_by = name_by
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -294,13 +304,12 @@ class MaskSaver:
             if unique_dims[d] == {None}:
                 ignored_dimensions.add(d)
 
-        if self.plate:
-            filename = f"{self.plate.id}.ome.zarr"
-        else:
-            filename = f"{self.image.id}.ome.zarr"
+        filename = get_zarr_name(self.plate or self.image, self.output, self.name_by)
 
         # Verify that we are linking this mask to a real ome-zarr
         source_image = self.source_image
+        print(f"source_image ??? needs to be None to use filename: {source_image}")
+        print(f"filename: {filename}", self.output, self.name_by)
         source_image_link = self.source_image
         if source_image is None:
             # Assume that we're using the output directory

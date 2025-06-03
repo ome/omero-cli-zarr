@@ -48,32 +48,19 @@ from zarr.hierarchy import Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import marshal_axes, marshal_transformations, open_store, print_status
-
-
-def sanitize_name(zarr_name: str) -> str:
-    # Avoids re.compile errors when writing Zarr data with the named root
-    # https://github.com/ome/omero-cli-zarr/pull/147#issuecomment-1669075660
-    return zarr_name.replace("[", "(").replace("]", ")")
-
-
-def get_zarr_name(
-    obj: omero.gateway.BlitzObjectWrapper, args: argparse.Namespace
-) -> str:
-    target_dir = args.output
-    name_by = args.name_by
-    if name_by == "name":
-        obj_name = sanitize_name(obj.name)
-        name = os.path.join(target_dir, "%s.ome.zarr" % obj_name)
-    else:
-        name = os.path.join(target_dir, "%s.ome.zarr" % obj.id)
-    return name
+from .util import (
+    get_zarr_name,
+    marshal_axes,
+    marshal_transformations,
+    open_store,
+    print_status,
+)
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     tile_width = args.tile_width
     tile_height = args.tile_height
-    name = get_zarr_name(image, args)
+    name = get_zarr_name(image, args.output, args.name_by)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
@@ -281,7 +268,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_cols = gs["columns"]
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
-    name = get_zarr_name(plate, args)
+    name = get_zarr_name(plate, args.output, args.name_by)
 
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
