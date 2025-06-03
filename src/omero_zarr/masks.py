@@ -18,10 +18,11 @@
 
 import argparse
 import logging
+import os
 import re
 import time
 from collections import defaultdict
-from fileinput import input
+from fileinput import input as finput
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -121,7 +122,7 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
         roi_map[roi_id] = roi
 
     try:
-        for line in input(label_map_arg):
+        for line in finput(label_map_arg):
             line = line.strip()
             sid, name, roi = line.split(",")
             label_map[name].append(roi_map[int(roi)])
@@ -184,6 +185,7 @@ def image_shapes_to_zarr(
             args.style,
             args.source_image,
             args.overlaps,
+            args.output,
         )
 
         if args.style == "split":
@@ -218,6 +220,7 @@ class MaskSaver:
         style: str = "labeled",
         source: str = "..",
         overlaps: str = "error",
+        output: Optional[str] = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -226,6 +229,7 @@ class MaskSaver:
         self.plate = plate
         self.plate_path = Optional[str]
         self.overlaps = overlaps
+        self.output = output
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -278,13 +282,14 @@ class MaskSaver:
         # Figure out whether we can flatten some dimensions
         unique_dims: Dict[str, Set[int]] = {
             "T": {unwrap(mask.theT) for shapes in masks for mask in shapes},
-            "C": {unwrap(mask.theC) for shapes in masks for mask in shapes},
             "Z": {unwrap(mask.theZ) for shapes in masks for mask in shapes},
         }
         ignored_dimensions: Set[str] = set()
+        # We always ignore the C dimension
+        ignored_dimensions.add("C")
         print(f"Unique dimensions: {unique_dims}")
 
-        for d in "TCZ":
+        for d in "TZ":
             if unique_dims[d] == {None}:
                 ignored_dimensions.add(d)
 
@@ -306,13 +311,16 @@ class MaskSaver:
             source_image = f"{source_image}/{self.plate_path}"
 
         print(f"source_image {source_image}")
-        src = parse_url(source_image)
-        assert src, "Source image does not exist"
+        image_path = source_image
+        if self.output:
+            image_path = os.path.join(self.output, source_image)
+        src = parse_url(image_path)
+        assert src, f"Source image does not exist at {image_path}"
         input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        store = open_store(filename)
+        store = open_store(image_path)
         root = open_group(store)
 
         if self.plate:
@@ -321,9 +329,10 @@ class MaskSaver:
             label_group = root
 
         _mask_shape: List[int] = list(self.image_shape)
+        mask_shape: Tuple[int, ...] = tuple(_mask_shape)
         for d in ignored_dimensions:
             _mask_shape[DIMENSION_ORDER[d]] = 1
-            mask_shape: Tuple[int, ...] = tuple(_mask_shape)
+            mask_shape = tuple(_mask_shape)
         del _mask_shape
         print(f"Ignoring dimensions {ignored_dimensions}")
 
