@@ -20,9 +20,12 @@
 
 import json
 from pathlib import Path
+from typing import List
 
 import pytest
-from omero.model import RoiI
+from omero.gateway import BlitzGateway, PlateWrapper
+from omero.model import ImageI, PolygonI, RoiI
+from omero.rtypes import rint, rstring
 from omero.testlib.cli import AbstractCLITest
 from omero_rois import mask_from_binary_image
 from omero_zarr.cli import ZarrControl
@@ -35,6 +38,45 @@ class TestRender(AbstractCLITest):
         self.args = self.login_args()
         self.cli.register("zarr", ZarrControl, "TEST")
         self.args += ["zarr"]
+
+    def add_shape_to_image(self, shape: PolygonI, image: ImageI) -> None:
+        roi = RoiI()
+        roi.setImage(image)
+        roi.addShape(shape)
+        updateService = self.client.sf.getUpdateService()
+        updateService.saveAndReturnObject(roi)
+
+    def rgba_to_int(self, red: int, green: int, blue: int, alpha: int = 255) -> int:
+        """Return the color as an Integer in RGBA encoding"""
+        return int.from_bytes([red, green, blue, alpha], byteorder="big", signed=True)
+
+    def add_polygon_to_image(
+        self, image: ImageI, xywh: List[int], z: int = 0, t: int = 0
+    ) -> None:
+        if xywh is None:
+            xywh = [50, 50, 100, 100]
+        x, y, w, h = xywh
+        polygon = PolygonI()
+        polygon.theZ = rint(z)
+        polygon.theT = rint(t)
+        polygon.fillColor = rint(self.rgba_to_int(255, 0, 255, 50))
+        polygon.strokeColor = rint(self.rgba_to_int(255, 255, 0))
+        points = f"{x},{y} {x},{y + h} {x + w},{y + h} {x + w},{y}"
+        polygon.points = rstring(points)
+        self.add_shape_to_image(polygon, image)
+
+    def add_polygons_to_plate(self, plate: PlateWrapper) -> None:
+        roi_count_per_image = 1
+        for well in plate.listChildren():
+            for field in well.listChildren():
+                image = field.getImage()._obj
+                for i in range(roi_count_per_image):
+                    # Add a polygon to each image in the plate
+                    x = 10 + (i * 50)
+                    y = 100 + (i * 5)
+                    # Rectangles don't overlap
+                    self.add_polygon_to_image(image, xywh=[x, y, 40, 40], z=0, t=0)
+                roi_count_per_image += 1
 
     # export tests
     # ========================================================================
@@ -164,3 +206,41 @@ class TestRender(AbstractCLITest):
         ).read_text(encoding="utf-8")
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [1, 512, 512]
+
+    def test_export_plate_polygons(
+        self, capsys: pytest.CaptureFixture, tmp_path: Path
+    ) -> None:
+
+        plates = self.import_plates(
+            client=self.client,
+            plates=1,
+            plate_acqs=1,
+            plate_cols=2,
+            plate_rows=2,
+            fields=1,
+        )
+        plate_id = plates[0].id.val
+
+        conn = BlitzGateway(client_obj=self.client)
+        plate = conn.getObject("Plate", plate_id)
+        self.add_polygons_to_plate(plate)
+
+        print("Plate ID:", plate_id)
+        self.cli.invoke(
+            self.args + ["export", f"Plate:{plate_id}", "--output", str(tmp_path)],
+            strict=True,
+        )
+
+        self.cli.invoke(
+            self.args + ["polygons", f"Plate:{plate_id}", "--output", str(tmp_path)],
+            strict=True,
+        )
+
+        print("tmp_path", tmp_path)
+
+        label_text = (
+            tmp_path / f"{plate_id}.zarr" / "A" / "1" / "0" / "labels" / "0" / ".zattrs"
+        ).read_text(encoding="utf-8")
+        label_image_json = json.loads(label_text)
+        assert "multiscales" in label_image_json
+        assert "image-label" in label_image_json
