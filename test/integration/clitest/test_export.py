@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 from typing import List
 
+import dask.array as da
 import pytest
 from omero.gateway import BlitzGateway, PlateWrapper
 from omero.model import ImageI, PolygonI, RoiI
@@ -66,17 +67,18 @@ class TestRender(AbstractCLITest):
         self.add_shape_to_image(polygon, image)
 
     def add_polygons_to_plate(self, plate: PlateWrapper) -> None:
-        roi_count_per_image = 1
+        roi_counts = {"A1": 1, "A2": 2, "B1": 3, "B2": 4}
         for well in plate.listChildren():
+            wellPos = well.getWellPos()
             for field in well.listChildren():
                 image = field.getImage()._obj
+                roi_count_per_image = roi_counts.get(wellPos, 1)
                 for i in range(roi_count_per_image):
                     # Add a polygon to each image in the plate
                     x = 10 + (i * 50)
                     y = 100 + (i * 5)
                     # Rectangles don't overlap
                     self.add_polygon_to_image(image, xywh=[x, y, 40, 40], z=0, t=0)
-                roi_count_per_image += 1
 
     # export tests
     # ========================================================================
@@ -287,9 +289,25 @@ class TestRender(AbstractCLITest):
 
         print("tmp_path", tmp_path)
 
-        label_text = (
-            tmp_path / zarr_name / "A" / "1" / "0" / "labels" / "0" / ".zattrs"
-        ).read_text(encoding="utf-8")
-        label_image_json = json.loads(label_text)
-        assert "multiscales" in label_image_json
-        assert "image-label" in label_image_json
+        def check_well(well_path: Path, label_count: int) -> None:
+            label_text = (well_path / "0" / "labels" / "0" / ".zattrs").read_text(
+                encoding="utf-8"
+            )
+            label_image_json = json.loads(label_text)
+            assert "multiscales" in label_image_json
+            assert "image-label" in label_image_json
+            datasets = label_image_json["multiscales"][0]["datasets"]
+            for dataset in datasets:
+                label_path = dataset["path"]
+                print("label_path", well_path / "0" / "labels" / "0" / label_path)
+                arr_data = da.from_zarr(well_path / "0" / "labels" / "0" / label_path)
+                print("arr_data", arr_data)
+                if label_path == "0":
+                    assert arr_data.shape == (512, 512)
+                max_value = arr_data.max().compute()
+                print("max_value", max_value)
+                assert max_value == label_count
+
+        # expect 1 label in A1, 4 labels in B2
+        check_well(tmp_path / zarr_name / "A" / "1", 1)
+        check_well(tmp_path / zarr_name / "B" / "2", 4)
