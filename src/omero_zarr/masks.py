@@ -39,7 +39,9 @@ from skimage.draw import polygon as sk_polygon
 from zarr.hierarchy import open_group
 
 from .util import (
+    get_map_anns,
     get_zarr_name,
+    map_anns_match,
     marshal_axes,
     marshal_transformations,
     open_store,
@@ -100,7 +102,20 @@ def plate_shapes_to_zarr(
 
     count = 0
     t0 = time.time()
-    for well in plate.listChildren():
+
+    skip_wells_map = args.skip_wells_map
+    wells = list(plate.listChildren())
+    if skip_wells_map:
+        # skip_wells_map is like MyKey:MyValue.
+        # Or wild-card MyKey:* or MyKey:Val*
+        well_kvps_by_id = get_map_anns(wells)
+        wells = [
+            well
+            for well in wells
+            if not map_anns_match(well_kvps_by_id.get(well.id, {}), skip_wells_map)
+        ]
+
+    for well in wells:
         row = plate.getRowLabels()[well.row]
         col = plate.getColumnLabels()[well.column]
         for field in range(n_fields[0], n_fields[1] + 1):
