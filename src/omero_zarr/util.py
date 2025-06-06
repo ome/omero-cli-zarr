@@ -16,10 +16,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from omero.gateway import ImageWrapper
+from omero.gateway import BlitzObjectWrapper, ImageWrapper
 from zarr.storage import FSStore
 
 
@@ -32,7 +33,7 @@ def print_status(t0: int, t: int, count: int, total: int) -> None:
     """
     percent_done = float(count) * 100 / total
     dt = t - t0
-    if dt > 0:
+    if dt > 0 and count > 0:
         rate = float(count) / (t - t0)
         eta_f = float(total - count) / rate
         eta = time.strftime("%H:%M:%S", time.gmtime(eta_f))
@@ -128,3 +129,23 @@ def marshal_transformations(
         zooms["y"] = zooms["y"] * multiscales_zoom
 
     return transformations
+
+
+def sanitize_name(zarr_name: str) -> str:
+    # Avoids re.compile errors when writing Zarr data with the named root
+    # https://github.com/ome/omero-cli-zarr/pull/147#issuecomment-1669075660
+    return zarr_name.replace("[", "(").replace("]", ")")
+
+
+def get_zarr_name(
+    obj: BlitzObjectWrapper, target_dir: Optional[str], name_by: str
+) -> str:
+
+    if name_by == "name":
+        obj_name = sanitize_name(obj.name)
+        name = "%s.ome.zarr" % obj_name
+    else:
+        name = "%s.ome.zarr" % obj.id
+    if target_dir is not None:
+        name = os.path.join(target_dir, name)
+    return name

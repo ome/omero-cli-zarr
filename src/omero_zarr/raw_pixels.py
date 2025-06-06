@@ -48,15 +48,19 @@ from zarr.hierarchy import Group, open_group
 
 from . import __version__
 from . import ngff_version as VERSION
-from .util import marshal_axes, marshal_transformations, open_store, print_status
+from .util import (
+    get_zarr_name,
+    marshal_axes,
+    marshal_transformations,
+    open_store,
+    print_status,
+)
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
-    target_dir = args.output
     tile_width = args.tile_width
     tile_height = args.tile_height
-
-    name = os.path.join(target_dir, "%s.zarr" % image.id)
+    name = get_zarr_name(image, args.output, args.name_by)
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
@@ -264,9 +268,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_cols = gs["columns"]
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
+    name = get_zarr_name(plate, args.output, args.name_by)
 
-    target_dir = args.output
-    name = os.path.join(target_dir, "%s.zarr" % plate.id)
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
     root = open_group(store)
@@ -317,6 +320,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             print_status(int(t0), int(time.time()), count, total)
 
         # Update plate_metadata after each Well
+        if len(well_paths) == 0:
+            continue
         write_plate_metadata(
             root,
             row_names,

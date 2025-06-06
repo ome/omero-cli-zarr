@@ -194,6 +194,15 @@ class ZarrControl(BaseControl):
             help=("Name of the array that will be stored. Ignored for --style=split"),
             default="0",
         )
+        polygons.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How the existing Image or Plate zarr is named. Default 'id' is "
+                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
+            ),
+        )
 
         masks = parser.add(sub, self.masks, MASKS_HELP)
         masks.add_argument(
@@ -244,6 +253,15 @@ class ZarrControl(BaseControl):
                 "overlapping labels"
             ),
         )
+        masks.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How the existing Image or Plate zarr is named. Default 'id' is "
+                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
+            ),
+        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
@@ -277,6 +295,15 @@ class ZarrControl(BaseControl):
             "--max_workers",
             default=None,
             help="Maximum number of workers (only for use with bioformats2raw)",
+        )
+        export.add_argument(
+            "--name_by",
+            default="id",
+            choices=["id", "name"],
+            help=(
+                "How to name the Image or Plate zarr. Default 'id' is [ID].ome.zarr. "
+                "'name' is [NAME].ome.zarr"
+            ),
         )
         export.add_argument(
             "object",
