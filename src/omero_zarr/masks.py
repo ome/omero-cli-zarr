@@ -88,6 +88,7 @@ def plate_shapes_to_zarr(
         args.style,
         args.source_image,
         args.overlaps,
+        args.output,
     )
 
     count = 0
@@ -321,12 +322,7 @@ class MaskSaver:
         input_pyramid_levels = len(input_pyramid.data)
 
         store = open_store(image_path)
-        root = open_group(store)
-
-        if self.plate:
-            label_group = root.require_group(self.plate_path)
-        else:
-            label_group = root
+        label_group = open_group(store)
 
         _mask_shape: List[int] = list(self.image_shape)
         mask_shape: Tuple[int, ...] = tuple(_mask_shape)
