@@ -49,7 +49,9 @@ from zarr.hierarchy import Group, open_group
 from . import __version__
 from . import ngff_version as VERSION
 from .util import (
+    get_map_anns,
     get_zarr_name,
+    map_anns_match,
     marshal_axes,
     marshal_transformations,
     open_store,
@@ -269,6 +271,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
     name = get_zarr_name(plate, args.output, args.name_by)
+    skip_wells_map = args.skip_wells_map
 
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
@@ -278,7 +281,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     max_fields = 0
     t0 = time.time()
 
-    well_paths = set()
+    well_paths = []
 
     col_names = [str(name) for name in plate.getColumnLabels()]
     row_names = [str(name) for name in plate.getRowLabels()]
@@ -289,9 +292,19 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     if acquisitions:
         plate_acq = [marshal_acquisition(x) for x in acquisitions]
 
-    wells = plate.listChildren()
+    wells = list(plate.listChildren())
     # sort by row then column...
     wells = sorted(wells, key=lambda x: (x.row, x.column))
+
+    if skip_wells_map:
+        # skip_wells_map is like MyKey:MyValue.
+        # Or wild-card MyKey:* or MyKey:Val*
+        well_kvps_by_id = get_map_anns(wells)
+        wells = [
+            well
+            for well in wells
+            if not map_anns_match(well_kvps_by_id.get(well.id, {}), skip_wells_map)
+        ]
 
     for well in wells:
         row = plate.getRowLabels()[well.row]
@@ -304,7 +317,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 field_name = "%d" % field
                 count += 1
                 img = ws.getImage()
-                well_paths.add(f"{row}/{col}")
+                well_paths.append(f"{row}/{col}")
                 field_info = {"path": f"{field_name}"}
                 if ac:
                     field_info["acquisition"] = ac.id
@@ -326,7 +339,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             root,
             row_names,
             col_names,
-            wells=list(well_paths),
+            wells=well_paths,
             field_count=max_fields,
             acquisitions=plate_acq,
             name=plate.name,

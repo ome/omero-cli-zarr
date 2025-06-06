@@ -194,15 +194,6 @@ class ZarrControl(BaseControl):
             help=("Name of the array that will be stored. Ignored for --style=split"),
             default="0",
         )
-        polygons.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How the existing Image or Plate zarr is named. Default 'id' is "
-                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
-            ),
-        )
 
         masks = parser.add(sub, self.masks, MASKS_HELP)
         masks.add_argument(
@@ -253,15 +244,6 @@ class ZarrControl(BaseControl):
                 "overlapping labels"
             ),
         )
-        masks.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How the existing Image or Plate zarr is named. Default 'id' is "
-                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
-            ),
-        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
@@ -297,23 +279,30 @@ class ZarrControl(BaseControl):
             help="Maximum number of workers (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How to name the Image or Plate zarr. Default 'id' is [ID].ome.zarr. "
-                "'name' is [NAME].ome.zarr"
-            ),
-        )
-        export.add_argument(
             "object",
             type=ProxyStringType("Image"),
             help="The Image to export.",
         )
 
+        # Need same arguments for Images and Masks
         for subcommand in (polygons, masks, export):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
+            )
+            subcommand.add_argument(
+                "--skip_wells_map",
+                type=str,
+                help="For Plates, skip wells with MapAnnotation values"
+                "matching this key-value pair. e.g. 'MyKey:MyVal*'",
+            )
+            subcommand.add_argument(
+                "--name_by",
+                default="id",
+                choices=["id", "name"],
+                help=(
+                    "How to name the Image or Plate zarr. Default 'id' is "
+                    "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
+                ),
             )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
