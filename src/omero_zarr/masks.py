@@ -36,6 +36,7 @@ from ome_zarr.writer import write_multiscale_labels
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
+from zarr.errors import GroupNotFoundError
 from zarr.hierarchy import open_group
 
 from .util import (
@@ -102,18 +103,20 @@ def plate_shapes_to_zarr(
 
     count = 0
     t0 = time.time()
-
     skip_wells_map = args.skip_wells_map
     wells = list(plate.listChildren())
     if skip_wells_map:
         # skip_wells_map is like MyKey:MyValue.
-        # Or wild-card MyKey:* or MyKey:Val*
+        # Or wildcard MyKey:* or MyKey:Val*
         well_kvps_by_id = get_map_anns(wells)
         wells = [
             well
             for well in wells
             if not map_anns_match(well_kvps_by_id.get(well.id, {}), skip_wells_map)
         ]
+
+    # sort by row then column...
+    wells = sorted(wells, key=lambda x: (x.row, x.column))
 
     for well in wells:
         row = plate.getRowLabels()[well.row]
@@ -323,8 +326,6 @@ class MaskSaver:
 
         # Verify that we are linking this mask to a real ome-zarr
         source_image = self.source_image
-        print(f"source_image ??? needs to be None to use filename: {source_image}")
-        print(f"filename: {filename}", self.output, self.name_by)
         source_image_link = self.source_image
         if source_image is None:
             # Assume that we're using the output directory
@@ -335,18 +336,28 @@ class MaskSaver:
             assert self.plate_path, "Need image path within the plate"
             source_image = f"{source_image}/{self.plate_path}"
 
-        print(f"source_image {source_image}")
+        print(f"Exporting labels for image at {source_image}")
         image_path = source_image
         if self.output:
             image_path = os.path.join(self.output, source_image)
         src = parse_url(image_path)
         assert src, f"Source image does not exist at {image_path}"
+
+        store = open_store(image_path)
+        try:
+            # Check if labels group already exists...
+            open_group(store, path=f"labels/{name}", mode="r")
+            print(f"Labels group: {name} already exists in {image_path}")
+            # and if so, we assume that array data is already there
+            return
+        except GroupNotFoundError:
+            pass
+
         input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        store = open_store(image_path)
-        label_group = open_group(store)
+        image_group = open_group(store)
 
         _mask_shape: List[int] = list(self.image_shape)
         mask_shape: Tuple[int, ...] = tuple(_mask_shape)
@@ -400,7 +411,7 @@ class MaskSaver:
 
         write_multiscale_labels(
             label_pyramid,
-            label_group,
+            image_group,
             name,
             axes=axes,
             coordinate_transformations=transformations,

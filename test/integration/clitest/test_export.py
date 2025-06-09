@@ -51,6 +51,7 @@ class TestRender(AbstractCLITest):
             fields=1,
         )
         plate_id = plates[0].id.val
+        print("Plate Created ID:", plate_id)
 
         conn = BlitzGateway(client_obj=self.client)
         plate = conn.getObject("Plate", plate_id)
@@ -97,6 +98,10 @@ class TestRender(AbstractCLITest):
                     y = 100 + (i * 5)
                     # Rectangles don't overlap
                     self.add_polygon_to_image(image, xywh=[x, y, 40, 40], z=0, t=0)
+                # for "B1", add overlapping polygon
+                if wellPos == "B1":
+                    # Add an overlapping polygon to the image in B1
+                    self.add_polygon_to_image(image, xywh=[20, 100, 40, 40], z=0, t=0)
 
     def add_kvps_to_wells(self, plate: PlateWrapper) -> None:
         """Add key-value pairs of "label:A1" to each well in the plate."""
@@ -108,6 +113,25 @@ class TestRender(AbstractCLITest):
                 vals.append(["rowA", "True"])
             map_ann.setValue(vals)
             well.linkAnnotation(map_ann)
+
+    def check_well(self, well_path: Path, label_count: int) -> None:
+        label_text = (well_path / "0" / "labels" / "0" / ".zattrs").read_text(
+            encoding="utf-8"
+        )
+        label_image_json = json.loads(label_text)
+        assert "multiscales" in label_image_json
+        assert "image-label" in label_image_json
+        datasets = label_image_json["multiscales"][0]["datasets"]
+        for dataset in datasets:
+            label_path = dataset["path"]
+            print("label_path", well_path / "0" / "labels" / "0" / label_path)
+            arr_data = da.from_zarr(well_path / "0" / "labels" / "0" / label_path)
+            print("arr_data", arr_data)
+            if label_path == "0":
+                assert arr_data.shape == (512, 512)
+            max_value = arr_data.max().compute()
+            print("max_value", max_value)
+            assert max_value == label_count
 
     # export tests
     # ========================================================================
@@ -301,8 +325,10 @@ class TestRender(AbstractCLITest):
             strict=True,
         )
 
+        # Don't fail on "B1" due to overlapping polygons
+        overlap_args = ["--overlaps", "dtype_max"]
         self.cli.invoke(
-            self.args + ["polygons"] + extra_args,
+            self.args + ["polygons"] + extra_args + overlap_args,
             strict=True,
         )
 
@@ -320,27 +346,57 @@ class TestRender(AbstractCLITest):
 
         print("tmp_path", tmp_path)
 
-        def check_well(well_path: Path, label_count: int) -> None:
-            label_text = (well_path / "0" / "labels" / "0" / ".zattrs").read_text(
-                encoding="utf-8"
-            )
-            label_image_json = json.loads(label_text)
-            assert "multiscales" in label_image_json
-            assert "image-label" in label_image_json
-            datasets = label_image_json["multiscales"][0]["datasets"]
-            for dataset in datasets:
-                label_path = dataset["path"]
-                print("label_path", well_path / "0" / "labels" / "0" / label_path)
-                arr_data = da.from_zarr(well_path / "0" / "labels" / "0" / label_path)
-                print("arr_data", arr_data)
-                if label_path == "0":
-                    assert arr_data.shape == (512, 512)
-                max_value = arr_data.max().compute()
-                print("max_value", max_value)
-                assert max_value == label_count
-
         # expect 1 label in A1, 4 labels in B2
         if "A1" in self.SKIP_WELLS_MAPS[skip_wells_map]:
-            check_well(tmp_path / zarr_name / "A" / "1", 1)
+            self.check_well(tmp_path / zarr_name / "A" / "1", 1)
         if "B2" in self.SKIP_WELLS_MAPS[skip_wells_map]:
-            check_well(tmp_path / zarr_name / "B" / "2", 4)
+            self.check_well(tmp_path / zarr_name / "B" / "2", 4)
+        # overlapping polygons in B1 - dtype max
+        if "B1" in self.SKIP_WELLS_MAPS[skip_wells_map]:
+            self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+
+    def test_plate_polygons_overlap(
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+    ) -> None:
+
+        plate = self.plate
+        plate_id = plate.id
+        print("Plate ID:", plate_id)
+
+        extra_args = [f"Plate:{plate_id}", "--output", str(tmp_path)]
+
+        self.cli.invoke(
+            self.args + ["export"] + extra_args,
+            strict=True,
+        )
+
+        # This should fail on "B1" due to overlapping polygons
+        with pytest.raises(Exception) as exc_info:
+            self.cli.invoke(
+                self.args + ["polygons"] + extra_args,
+                strict=True,
+            )
+        assert "overlaps with existing labels" in str(exc_info.value)
+
+        zarr_name = f"{plate_id}.ome.zarr"
+
+        # First Wells labels should be exported OK...
+        self.check_well(tmp_path / zarr_name / "A" / "1", 1)
+        self.check_well(tmp_path / zarr_name / "A" / "2", 2)
+        # Wells B3 and B4 - no labels
+        with pytest.raises(FileNotFoundError):
+            self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+        with pytest.raises(FileNotFoundError):
+            self.check_well(tmp_path / zarr_name / "B" / "2", 4)
+
+        # Test that we can pick-up labels export where we left off
+        overlap_args = ["--overlaps", "dtype_max"]
+        self.cli.invoke(
+            self.args + ["polygons"] + extra_args + overlap_args,
+            strict=True,
+        )
+
+        self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+        self.check_well(tmp_path / zarr_name / "B" / "2", 4)
