@@ -293,12 +293,14 @@ class MaskSaver:
         # Figure out whether we can flatten some dimensions
         unique_dims: Dict[str, Set[int]] = {
             "T": {unwrap(mask.theT) for shapes in masks for mask in shapes},
+            "C": {unwrap(mask.theC) for shapes in masks for mask in shapes},
             "Z": {unwrap(mask.theZ) for shapes in masks for mask in shapes},
         }
         ignored_dimensions: Set[str] = set()
-        # We always ignore the C dimension
-        ignored_dimensions.add("C")
         print(f"Unique dimensions: {unique_dims}")
+        # We always ignore the C dimension
+        if unique_dims["C"] == {None} or len(unique_dims["C"]) == 1:
+            ignored_dimensions.add("C")
 
         for d in "TZ":
             if unique_dims[d] == {None}:
