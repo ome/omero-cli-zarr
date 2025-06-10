@@ -136,9 +136,14 @@ class TestRender(AbstractCLITest):
     # export tests
     # ========================================================================
 
+    @pytest.mark.parametrize("metadata_only", [False, True])
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_zarr(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        metadata_only: bool,
     ) -> None:
         """Test export of a Zarr image."""
         sizec = 2
@@ -152,6 +157,8 @@ class TestRender(AbstractCLITest):
             "--name_by",
             name_by,
         ]
+        if metadata_only:
+            exp_args.append("--metadata_only")
         self.cli.invoke(
             self.args + exp_args,
             strict=True,
@@ -184,9 +191,18 @@ class TestRender(AbstractCLITest):
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [sizec, 512, 512]
 
+        arr_data = da.from_zarr(tmp_path / zarr_name / "0")
+        max_value = arr_data.max().compute()
+        assert metadata_only == (max_value == 0)
+
+    @pytest.mark.parametrize("metadata_only", [False, True])
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_plate(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        metadata_only: bool,
     ) -> None:
 
         plate_id = self.plate.id
@@ -198,6 +214,8 @@ class TestRender(AbstractCLITest):
             "--name_by",
             name_by,
         ]
+        if metadata_only:
+            exp_args.append("--metadata_only")
         self.cli.invoke(
             self.args + exp_args,
             strict=True,
@@ -220,12 +238,12 @@ class TestRender(AbstractCLITest):
         assert len(attrs_json["plate"]["wells"]) == 4
         assert attrs_json["plate"]["rows"] == [{"name": "A"}, {"name": "B"}]
         assert attrs_json["plate"]["columns"] == [{"name": "1"}, {"name": "2"}]
-
-        arr_text = (tmp_path / zarr_name / "A" / "1" / "0" / "0" / ".zarray").read_text(
-            encoding="utf-8"
-        )
-        arr_json = json.loads(arr_text)
-        assert arr_json["shape"] == [512, 512]
+        # check first well A1
+        arr_data = da.from_zarr(tmp_path / zarr_name / "A" / "1" / "0" / "0")
+        assert arr_data.shape == (512, 512)
+        print("arr_data", arr_data)
+        max_value = arr_data.max().compute()
+        assert metadata_only == (max_value == 0)
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_masks(

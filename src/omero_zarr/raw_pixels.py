@@ -66,7 +66,13 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
+    add_image(
+        image,
+        root,
+        tile_width=tile_width,
+        tile_height=tile_height,
+        metadata_only=args.metadata_only,
+    )
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -77,6 +83,7 @@ def add_image(
     parent: Group,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    metadata_only: bool = False,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Returns the number of resolution levels generated for the image.
@@ -93,7 +100,9 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
+    paths = add_raw_image(
+        image, parent, level_count, tile_width, tile_height, metadata_only
+    )
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -113,6 +122,7 @@ def add_raw_image(
     level_count: int,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    metadata_only: bool = False,
 ) -> List[str]:
     pixels = image.getPrimaryPixels()
     omero_dtype = image.getPixelsType()
@@ -161,6 +171,12 @@ def add_raw_image(
         chunks=chunks,
         dtype=d_type,
     )
+    paths = [str(level) for level in range(level_count)]
+
+    if metadata_only:
+        # Skip export of pixel data, but still create empty arrays
+        downsample_pyramid_on_disk(parent, paths)
+        return paths
 
     # Need to be sure that dims match (if array already existed)
     assert zarray.shape == shape
@@ -201,8 +217,6 @@ def add_raw_image(
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
                             zarray[tuple(indices)] = tile
-
-    paths = [str(level) for level in range(level_count)]
 
     downsample_pyramid_on_disk(parent, paths)
     return paths
@@ -325,7 +339,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                add_image(img, field_group)
+                add_image(img, field_group, metadata_only=args.metadata_only)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
                 write_well_metadata(col_group, fields)

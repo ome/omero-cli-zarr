@@ -283,6 +283,11 @@ class ZarrControl(BaseControl):
             type=ProxyStringType("Image"),
             help="The Image to export.",
         )
+        export.add_argument(
+            "--metadata_only",
+            action="store_true",
+            help="Only write metadata, do not export pixel data",
+        )
 
         # Need same arguments for Images and Masks
         for subcommand in (polygons, masks, export):
