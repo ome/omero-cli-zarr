@@ -63,6 +63,8 @@ To export Images or Plates via the OMERO API::
     $ omero zarr export Image:1 --metadata_only
     $ omero zarr export Plate:2 --metadata_only
 
+    # To export Key-Value pairs from Wells in a Plate as a CSV file,
+    $ omero zarr export_csv Plate:1 --skip_wells_map my_key:*
 
 NB: If the connection to OMERO is lost and the Image is partially exported,
 re-running the command will attempt to complete the export.

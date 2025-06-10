@@ -29,6 +29,7 @@ from omero.model import ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .kvp_tables import plate_to_table
 from .masks import (
     MASK_DTYPE_SIZE,
     MaskSaver,
@@ -289,8 +290,16 @@ class ZarrControl(BaseControl):
             help="Only write metadata, do not export pixel data",
         )
 
+        # CSV export
+        csv = parser.add(sub, self.export_csv, "Export Key-Value pairs as csv")
+        csv.add_argument(
+            "object",
+            type=ProxyStringType("Image"),
+            help="The Plate from which to export Key-Value pairs.",
+        )
+
         # Need same arguments for Images and Masks
-        for subcommand in (polygons, masks, export):
+        for subcommand in (polygons, masks, export, csv):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
             )
@@ -355,6 +364,15 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+
+    @gateway_required
+    def export_csv(self, args: argparse.Namespace) -> None:
+        """Export Image or Plate as a CSV file."""
+        print("export_csv...", isinstance(args.object, PlateI))
+        if isinstance(args.object, PlateI):
+            plate = self._lookup(self.gateway, "Plate", args.object.id)
+            self.ctx.out("Export Plate: %s" % plate.name)
+            plate_to_table(plate, args)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
