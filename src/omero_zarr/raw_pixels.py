@@ -309,6 +309,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     wells = list(plate.listChildren())
     # sort by row then column...
     wells = sorted(wells, key=lambda x: (x.row, x.column))
+    well_count = len(wells)
 
     if skip_wells_map:
         # skip_wells_map is like MyKey:MyValue.
@@ -319,6 +320,10 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             for well in wells
             if not map_anns_match(well_kvps_by_id.get(well.id, {}), skip_wells_map)
         ]
+        print(
+            f"Skipping {well_count - len(wells)} out of {well_count} wells"
+            f" with skip_wells_map: {skip_wells_map}"
+        )
 
     for well in wells:
         row = plate.getRowLabels()[well.row]
