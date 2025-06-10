@@ -336,7 +336,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 field_name = "%d" % field
                 count += 1
                 img = ws.getImage()
-                well_paths.append(f"{row}/{col}")
+                if f"{row}/{col}" not in well_paths:
+                    well_paths.append(f"{row}/{col}")
                 field_info = {"path": f"{field_name}"}
                 if ac:
                     field_info["acquisition"] = ac.id

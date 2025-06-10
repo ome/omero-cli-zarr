@@ -316,7 +316,6 @@ class MaskSaver:
         }
         ignored_dimensions: Set[str] = set()
         print(f"Unique dimensions: {unique_dims}")
-        # We always ignore the C dimension
         if unique_dims["C"] == {None} or len(unique_dims["C"]) == 1:
             ignored_dimensions.add("C")
 
@@ -585,6 +584,7 @@ class MaskSaver:
                 if shape.fillColor:
                     fillColors[shape_value] = unwrap(shape.fillColor)
                 binim_yx, (t, c, z, y, x, h, w) = self.shape_to_binim_yx(shape)
+                # if z, c or t are None, we apply the mask to all Z, C or T indices
                 for i_t in self._get_indices(ignored_dimensions, "T", t, size_t):
                     for i_c in self._get_indices(ignored_dimensions, "C", c, size_c):
                         for i_z in self._get_indices(
