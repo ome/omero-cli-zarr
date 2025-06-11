@@ -65,18 +65,18 @@ def plate_to_table(
 
     print("column_names", column_names)
 
-    column_names = ["Well"] + column_names
+    plate_name = plate.getName()
 
     # write csv file...
     csv_name = name.replace(".ome.zarr", ".csv")
     print(f"Writing CSV file: {csv_name}")
     with open(csv_name, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(column_names)
+        writer.writerow(["Plate", "Well"] + column_names)
 
         for well in wells:
             kvps = well_kvps_by_id.get(well.id, {})
-            row = [f"{well.id}"]
-            for key in column_names[1:]:
+            row = [plate_name, f"{well.getWellPos()}"]
+            for key in column_names:
                 row.append(";".join(kvps.get(key, [])))
             writer.writerow(row)
