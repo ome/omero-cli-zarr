@@ -18,9 +18,10 @@
 
 import os
 import time
+from collections import defaultdict
 from typing import Dict, List, Optional
 
-from omero.gateway import BlitzObjectWrapper, ImageWrapper
+from omero.gateway import BlitzObjectWrapper, ImageWrapper, MapAnnotationWrapper
 from zarr.storage import FSStore
 
 
@@ -149,3 +150,49 @@ def get_zarr_name(
     if target_dir is not None:
         name = os.path.join(target_dir, name)
     return name
+
+
+def get_map_anns(objs: List[BlitzObjectWrapper]) -> Dict[int, Dict[str, List[str]]]:
+    """
+    Returns a map of {obj_id: {key: [value, ...]}} for all MapAnnotations
+    """
+    map_anns_by_id: Dict[int, Dict[str, List[str]]] = {}
+    for obj in objs:
+        map_anns = defaultdict(list)
+        for ann in obj.listAnnotations():
+            if isinstance(ann, MapAnnotationWrapper):
+                for key_value in ann.getValue():
+                    map_anns[key_value[0]].append(key_value[1])
+        map_anns_by_id[obj.id] = dict(map_anns)
+    return map_anns_by_id
+
+
+def map_anns_match(kvps: Dict[str, List[str]], key_value: str) -> bool:
+    """
+    Returns True if the key_value pair matches any of the MapAnnotation values.
+
+    kvps: a map of {key: [value, ...]}
+    key_value: a string in the format "key:value". value can include wildcard*
+    """
+    if ":" not in key_value:
+        return False
+    key, value = key_value.split(":", 1)
+    if key in kvps:
+        for v in kvps[key]:
+            if value.endswith("*") and value.startswith("*"):
+                # wildcard match
+                if value.replace("*", "") in v:
+                    return True
+            elif value.startswith("*"):
+                # wildcard match at the start
+                if v.endswith(value.replace("*", "")):
+                    return True
+            elif value.endswith("*"):
+                # wildcard match at the end
+                if v.startswith(value.replace("*", "")):
+                    return True
+            else:
+                # exact match
+                if v == value:
+                    return True
+    return False
