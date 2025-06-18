@@ -28,6 +28,7 @@ import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from ome_zarr.dask_utils import resize as da_resize
 from ome_zarr.format import FormatV04
+from ome_zarr.io import parse_url
 from ome_zarr.writer import (
     write_multiscales_metadata,
     write_plate_metadata,
@@ -101,7 +102,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, datasets, axes=axes, fmt=FormatV04())
+    write_multiscales_metadata(parent, datasets, axes=axes)
 
     return (level_count, axes)
 
@@ -214,15 +215,19 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
     and down-samples it by a factor of 2 for each of the other paths
     """
     group_path = str(parent.store_path)
-    img_path = parent.store_path / parent.path
+    print("group_path: %s" % group_path)
+    print("parent.path: %s" % parent.path)
+    img_path = parent.store_path  # / parent.path
+    print("img_path: %s" % img_path)
     image_path = os.path.join(group_path, parent.path)
+    print("image_path: %s" % image_path)
     for count, path in enumerate(paths[1:]):
-        target_path = os.path.join(image_path, path)
+        target_path = os.path.join(group_path, path)
         if os.path.exists(target_path):
             print("path exists: %s" % target_path)
             continue
         # open previous resolution from disk via dask...
-        path_to_array = os.path.join(image_path, paths[count])
+        path_to_array = os.path.join(group_path, paths[count])
         dask_image = da.from_zarr(path_to_array)
 
         # resize in X and Y
@@ -273,9 +278,12 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
     name = get_zarr_name(plate, args.output, args.name_by)
 
-    store = open_store(name)
-    print(f"Exporting to {name} ({VERSION})")
+    # store = open_store(name)
+
+    # Use fmt=FormatV04() in parse_url() to write v0.4 format (zarr v2)
+    store = parse_url(name, mode="w", fmt=FormatV04()).store
     root = open_group(store)
+    print(f"Exporting to {name} ({VERSION})")
 
     count = 0
     max_fields = 0
@@ -313,7 +321,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                     field_info["acquisition"] = ac.id
                 fields.append(field_info)
                 row_group = root.require_group(row)
-                col_group = row_group.require_group(col)
+                col_group = row_group.require_group(str(col))
                 field_group = col_group.require_group(field_name)
                 add_image(img, field_group)
                 add_omero_metadata(field_group, img)
