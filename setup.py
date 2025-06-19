@@ -51,7 +51,11 @@ setup(
     author="The Open Microscopy Team",
     author_email="",
     python_requires=">=3",
-    install_requires=["omero-py>=5.6.0", "ome-zarr>=0.12.0"],
+    install_requires=[
+        "omero-py>=5.6.0",
+        # "ome-zarr>=0.12.0"
+        "ome-zarr @ git+https://github.com/ome/ome-zarr-py.git@refs/pull/413/head",
+    ],
     long_description=long_description,
     keywords=["OMERO.CLI", "plugin"],
     url="https://github.com/ome/omero-cli-zarr/",
