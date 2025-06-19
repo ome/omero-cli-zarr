@@ -53,6 +53,7 @@ setup(
     python_requires=">=3",
     install_requires=[
         "omero-py>=5.6.0",
+        "zarr>=3.0.8",
         # "ome-zarr>=0.12.0"
         "ome-zarr @ git+https://github.com/ome/ome-zarr-py.git@refs/pull/413/head",
     ],
