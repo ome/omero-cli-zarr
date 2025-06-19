@@ -223,6 +223,7 @@ def downsample_pyramid_on_disk(
     """
     group_path = str(parent.store_path)
     fmt = check_format(parent)
+    print("downsample_pyramid_on_disk", group_path)
     for count, path in enumerate(paths[1:]):
         target_path = os.path.join(group_path, path)
         if os.path.exists(target_path):

@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 import omero.clients  # noqa
 from ome_zarr.conversions import int_to_rgba_255
+from ome_zarr.format import CurrentFormat, format_from_version
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Multiscales, Node
 from ome_zarr.scale import Scaler
@@ -38,13 +39,7 @@ from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
 from zarr import open_group
 
-from .util import (
-    get_zarr_name,
-    marshal_axes,
-    marshal_transformations,
-    open_store,
-    print_status,
-)
+from .util import get_zarr_name, marshal_axes, marshal_transformations, print_status
 
 LOGGER = logging.getLogger("omero_zarr.masks")
 
@@ -195,6 +190,7 @@ def image_shapes_to_zarr(
             args.overlaps,
             args.output,
             args.name_by,
+            args.version,
         )
 
         if args.style == "split":
@@ -231,6 +227,7 @@ class MaskSaver:
         overlaps: str = "error",
         output: Optional[str] = None,
         name_by: str = "id",
+        version: Optional[str] = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -241,6 +238,7 @@ class MaskSaver:
         self.overlaps = overlaps
         self.output = output
         self.name_by = name_by
+        self.version = version
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -330,7 +328,11 @@ class MaskSaver:
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        store = open_store(image_path)
+        if self.version is not None:
+            fmt = format_from_version(self.version)
+        else:
+            fmt = CurrentFormat()
+        store = parse_url(image_path, mode="w", fmt=fmt).store
         label_group = open_group(store)
 
         _mask_shape: List[int] = list(self.image_shape)
