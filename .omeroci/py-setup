@@ -2,3 +2,4 @@
 
 . ${TARGET}/.omero/py-setup  # Run upstream setup
 pip install omero-rois
+pip install git+https://github.com/ome/ome-zarr-py.git@refs/pull/413/head
