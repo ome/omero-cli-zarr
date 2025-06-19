@@ -315,6 +315,12 @@ class ZarrControl(BaseControl):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
             )
+            subcommand.add_argument(
+                "--version",
+                type=str,
+                choices=["0.4", "0.5"],
+                help="OME-Zarr version. Default is '0.5'",
+            )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
                 "--overlaps",
@@ -355,6 +361,12 @@ class ZarrControl(BaseControl):
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
             if args.bf or args.bfpath:
+                if args.version and args.version != "0.4":
+                    self.ctx.die(
+                        110,
+                        "bioformats2raw does not support OME-Zarr version %s"
+                        % args.version,
+                    )
                 self._bf_export(image, args)
             else:
                 image_to_zarr(image, args)

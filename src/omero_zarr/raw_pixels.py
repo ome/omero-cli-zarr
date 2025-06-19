@@ -27,9 +27,11 @@ import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from ome_zarr.dask_utils import resize as da_resize
-from ome_zarr.format import FormatV04
+from ome_zarr.format import CurrentFormat, format_from_version
 from ome_zarr.io import parse_url
 from ome_zarr.writer import (
+    add_metadata,
+    check_format,
     write_multiscales_metadata,
     write_plate_metadata,
     write_well_metadata,
@@ -49,23 +51,20 @@ from omero.rtypes import unwrap
 from zarr import Group, open_group
 
 from . import __version__
-from . import ngff_version as VERSION
-from .util import (
-    get_zarr_name,
-    marshal_axes,
-    marshal_transformations,
-    open_store,
-    print_status,
-)
+from .util import get_zarr_name, marshal_axes, marshal_transformations, print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     tile_width = args.tile_width
     tile_height = args.tile_height
     name = get_zarr_name(image, args.output, args.name_by)
-    print(f"Exporting to {name} ({VERSION})")
-    store = open_store(name)
-    root = open_group(store, zarr_version=2)
+    if args.version is not None:
+        fmt = format_from_version(args.version)
+    else:
+        fmt = CurrentFormat()
+    print(f"Exporting to {name} ({fmt.version})")
+    store = parse_url(name, mode="w", fmt=fmt).store
+    root = open_group(store)
     add_image(image, root, tile_width=tile_width, tile_height=tile_height)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
@@ -114,6 +113,7 @@ def add_raw_image(
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
 ) -> List[str]:
+    fmt = check_format(parent)
     pixels = image.getPrimaryPixels()
     omero_dtype = image.getPixelsType()
     pixelTypes = {
@@ -154,13 +154,18 @@ def add_raw_image(
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
     shape = tuple(dims + [size_y, size_x])
     chunks = tuple([1] * len(dims) + [tile_height, tile_width])
+    kwargs = {}
+    dim_names = [ax["name"] for ax in marshal_axes(image)]
+    if fmt.zarr_format == 3:
+        kwargs["dimension_names"] = dim_names
     zarray = parent.require_array(
         path,
         shape=shape,
         exact=True,
         chunks=chunks,
         dtype=d_type,
-        chunk_key_encoding={"name": "v2", "separator": "/"},
+        chunk_key_encoding=fmt.chunk_key_encoding,
+        **kwargs,
     )
 
     # Need to be sure that dims match (if array already existed)
@@ -205,22 +210,19 @@ def add_raw_image(
 
     paths = [str(level) for level in range(level_count)]
 
-    downsample_pyramid_on_disk(parent, paths)
+    downsample_pyramid_on_disk(parent, paths, dim_names)
     return paths
 
 
-def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
+def downsample_pyramid_on_disk(
+    parent: Group, paths: List[str], dim_names: Optional[List[str]] = None
+) -> List[str]:
     """
     Takes a high-resolution Zarr array at paths[0] in the zarr group
     and down-samples it by a factor of 2 for each of the other paths
     """
     group_path = str(parent.store_path)
-    print("group_path: %s" % group_path)
-    print("parent.path: %s" % parent.path)
-    img_path = parent.store_path  # / parent.path
-    print("img_path: %s" % img_path)
-    image_path = os.path.join(group_path, parent.path)
-    print("image_path: %s" % image_path)
+    fmt = check_format(parent)
     for count, path in enumerate(paths[1:]):
         target_path = os.path.join(group_path, path)
         if os.path.exists(target_path):
@@ -238,13 +240,20 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
             dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
         )
 
+        options = {"zarr_format": fmt.zarr_format}
+        if fmt.zarr_format == 2:
+            options["dimension_separator"] = "/"
+        else:
+            options["chunk_key_encoding"] = fmt.chunk_key_encoding
+            if dim_names is not None:
+                options["dimension_names"] = dim_names
+
         # write to disk
         da.to_zarr(
             arr=output,
-            url=img_path,
+            url=parent.store_path,
             component=path,
-            dimension_separator="/",
-            zarr_format=2,
+            **options,
         )
 
     return paths
@@ -280,10 +289,14 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     # store = open_store(name)
 
+    if args.version is not None:
+        fmt = format_from_version(args.version)
+    else:
+        fmt = CurrentFormat()
     # Use fmt=FormatV04() in parse_url() to write v0.4 format (zarr v2)
-    store = parse_url(name, mode="w", fmt=FormatV04()).store
+    store = parse_url(name, mode="w", fmt=fmt).store
     root = open_group(store)
-    print(f"Exporting to {name} ({VERSION})")
+    print(f"Exporting to {name} ({fmt.version})")
 
     count = 0
     max_fields = 0
@@ -348,22 +361,25 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
-    image_data = {
-        "id": 1,
+    fmt = check_format(zarr_root)
+    omero_data = {
         "channels": [channelMarshal(c) for c in image.getChannels()],
         "rdefs": {
             "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
-        "version": VERSION,
     }
-    zarr_root.attrs["omero"] = image_data
+    if fmt.zarr_format == 2:
+        omero_data["version"] = fmt.version
+    add_metadata(zarr_root, {"omero": omero_data})
     image._closeRE()
 
 
 def add_toplevel_metadata(zarr_root: Group) -> None:
-    zarr_root.attrs["_creator"] = {"name": "omero-zarr", "version": __version__}
+    add_metadata(
+        zarr_root, {"_creator": {"name": "omero-zarr", "version": __version__}}
+    )
 
 
 def channelMarshal(channel: Channel) -> Dict[str, Any]:
