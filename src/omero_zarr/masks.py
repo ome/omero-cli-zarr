@@ -298,7 +298,6 @@ class MaskSaver:
         }
         ignored_dimensions: Set[str] = set()
         print(f"Unique dimensions: {unique_dims}")
-        # We always ignore the C dimension
         if unique_dims["C"] == {None} or len(unique_dims["C"]) == 1:
             ignored_dimensions.add("C")
 
