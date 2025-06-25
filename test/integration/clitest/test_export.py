@@ -20,7 +20,7 @@
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import dask.array as da
 import pytest
@@ -30,15 +30,20 @@ from omero.rtypes import rint, rstring
 from omero.testlib.cli import AbstractCLITest
 from omero_rois import mask_from_binary_image
 from omero_zarr.cli import ZarrControl
+from pytest import FixtureRequest
 
 
-class TestRender(AbstractCLITest):
+class TestExport(AbstractCLITest):
 
     def setup_method(self, method: str) -> None:
         """Set up the test."""
         self.args = self.login_args()
         self.cli.register("zarr", ZarrControl, "TEST")
         self.args += ["zarr"]
+
+    @pytest.fixture(params=("0.4", "0.5", None))
+    def version(self, request: FixtureRequest) -> Optional[str]:
+        return request.param
 
     def add_shape_to_image(self, shape: PolygonI, image: ImageI) -> None:
         roi = RoiI()
@@ -85,7 +90,11 @@ class TestRender(AbstractCLITest):
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_zarr(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        version: Optional[str] = None,
     ) -> None:
         """Test export of a Zarr image."""
         sizec = 2
@@ -99,6 +108,8 @@ class TestRender(AbstractCLITest):
             "--name_by",
             name_by,
         ]
+        if version:
+            exp_args += ["--version", version]
         self.cli.invoke(
             self.args + exp_args,
             strict=True,
@@ -119,17 +130,30 @@ class TestRender(AbstractCLITest):
         assert len(list(tmp_path.iterdir())) == 1
         assert (tmp_path / zarr_name).is_dir()
 
-        attrs_text = (tmp_path / zarr_name / ".zattrs").read_text(encoding="utf-8")
+        if version == "0.4":
+            attrs_name = ".zattrs"
+            arr_name = ".zarray"
+        else:
+            attrs_name = "zarr.json"
+            arr_name = "zarr.json"
+
+        attrs_text = (tmp_path / zarr_name / attrs_name).read_text(encoding="utf-8")
         attrs_json = json.loads(attrs_text)
         print(attrs_json)
+
+        if version != "0.4":
+            attrs_json = attrs_json.get("attributes", {}).get("ome")
+
         assert "multiscales" in attrs_json
         assert len(attrs_json["omero"]["channels"]) == sizec
         assert attrs_json["omero"]["channels"][0]["window"]["min"] == 0
         assert attrs_json["omero"]["channels"][0]["window"]["max"] == 255
 
-        arr_text = (tmp_path / zarr_name / "0" / ".zarray").read_text(encoding="utf-8")
+        arr_text = (tmp_path / zarr_name / "0" / arr_name).read_text(encoding="utf-8")
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [sizec, 512, 512]
+        if version != "0.4":
+            assert "dimension_names" in arr_json
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_plate(
