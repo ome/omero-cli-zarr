@@ -49,7 +49,9 @@ from zarr.hierarchy import Group, open_group
 from . import __version__
 from . import ngff_version as VERSION
 from .util import (
+    get_map_anns,
     get_zarr_name,
+    map_anns_match,
     marshal_axes,
     marshal_transformations,
     open_store,
@@ -64,7 +66,13 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     print(f"Exporting to {name} ({VERSION})")
     store = open_store(name)
     root = open_group(store)
-    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
+    add_image(
+        image,
+        root,
+        tile_width=tile_width,
+        tile_height=tile_height,
+        metadata_only=args.metadata_only,
+    )
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -75,6 +83,7 @@ def add_image(
     parent: Group,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    metadata_only: bool = False,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Returns the number of resolution levels generated for the image.
@@ -91,7 +100,9 @@ def add_image(
         longest = longest // 2
         level_count += 1
 
-    paths = add_raw_image(image, parent, level_count, tile_width, tile_height)
+    paths = add_raw_image(
+        image, parent, level_count, tile_width, tile_height, metadata_only
+    )
 
     axes = marshal_axes(image)
     transformations = marshal_transformations(image, len(paths))
@@ -111,6 +122,7 @@ def add_raw_image(
     level_count: int,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    metadata_only: bool = False,
 ) -> List[str]:
     pixels = image.getPrimaryPixels()
     omero_dtype = image.getPixelsType()
@@ -159,6 +171,12 @@ def add_raw_image(
         chunks=chunks,
         dtype=d_type,
     )
+    paths = [str(level) for level in range(level_count)]
+
+    if metadata_only:
+        # Skip export of pixel data, but still create empty arrays
+        downsample_pyramid_on_disk(parent, paths)
+        return paths
 
     # Need to be sure that dims match (if array already existed)
     assert zarray.shape == shape
@@ -199,8 +217,6 @@ def add_raw_image(
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
                             zarray[tuple(indices)] = tile
-
-    paths = [str(level) for level in range(level_count)]
 
     downsample_pyramid_on_disk(parent, paths)
     return paths
@@ -269,6 +285,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     n_fields = plate.getNumberOfFields()
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
     name = get_zarr_name(plate, args.output, args.name_by)
+    skip_wells_map = args.skip_wells_map
 
     store = open_store(name)
     print(f"Exporting to {name} ({VERSION})")
@@ -278,7 +295,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     max_fields = 0
     t0 = time.time()
 
-    well_paths = set()
+    well_paths = []
 
     col_names = [str(name) for name in plate.getColumnLabels()]
     row_names = [str(name) for name in plate.getRowLabels()]
@@ -289,9 +306,24 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     if acquisitions:
         plate_acq = [marshal_acquisition(x) for x in acquisitions]
 
-    wells = plate.listChildren()
+    wells = list(plate.listChildren())
     # sort by row then column...
     wells = sorted(wells, key=lambda x: (x.row, x.column))
+    well_count = len(wells)
+
+    if skip_wells_map:
+        # skip_wells_map is like MyKey:MyValue.
+        # Or wild-card MyKey:* or MyKey:Val*
+        well_kvps_by_id = get_map_anns(wells)
+        wells = [
+            well
+            for well in wells
+            if not map_anns_match(well_kvps_by_id.get(well.id, {}), skip_wells_map)
+        ]
+        print(
+            f"Skipping {well_count - len(wells)} out of {well_count} wells"
+            f" with skip_wells_map: {skip_wells_map}"
+        )
 
     for well in wells:
         row = plate.getRowLabels()[well.row]
@@ -304,7 +336,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 field_name = "%d" % field
                 count += 1
                 img = ws.getImage()
-                well_paths.add(f"{row}/{col}")
+                if f"{row}/{col}" not in well_paths:
+                    well_paths.append(f"{row}/{col}")
                 field_info = {"path": f"{field_name}"}
                 if ac:
                     field_info["acquisition"] = ac.id
@@ -312,7 +345,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                 row_group = root.require_group(row)
                 col_group = row_group.require_group(col)
                 field_group = col_group.require_group(field_name)
-                add_image(img, field_group)
+                add_image(img, field_group, metadata_only=args.metadata_only)
                 add_omero_metadata(field_group, img)
                 # Update Well metadata after each image
                 write_well_metadata(col_group, fields)
@@ -326,7 +359,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
             root,
             row_names,
             col_names,
-            wells=list(well_paths),
+            wells=well_paths,
             field_count=max_fields,
             acquisitions=plate_acq,
             name=plate.name,
