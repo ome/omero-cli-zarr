@@ -1,3 +1,6 @@
+# 0.6.1 (June 2024)
+
+- Fix version
 
 # 0.6.0 (June 2024)
 
