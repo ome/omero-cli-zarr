@@ -83,7 +83,9 @@ def format_s3_uri(uri: str, endpoint: str) -> str:
     return f"{parsed_uri.scheme}" + "://" + endpoint + "/" + url + f"{parsed_uri.path}"
 
 
-def load_array(store: zarr.storage.Store, path: Optional[str] = None) -> zarr.Array:
+def load_array(
+    store: zarr.storage.Store, path: Optional[str] = None
+) -> zarr.core.Array:
     arr = zarr.open(store=store, mode="r", path=path)
     return arr
 
@@ -628,8 +630,8 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                         conn, store, args, None, image_path=str(series)
                     )
                     objs.append(obj)
-                except zarr.errors.PathNotFoundError:
-                    # FileNotFoundError (zarr v3) or
+                except FileNotFoundError:
+                    # FIXME: FileNotFoundError (zarr v3) or
                     # zarr.errors.PathNotFoundError (zarr v2)
                     series_exists = False
                 series += 1
