@@ -26,6 +26,7 @@ import dask.array as da
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from numcodecs import Blosc
 from ome_zarr.dask_utils import resize as da_resize
 from ome_zarr.format import CurrentFormat, format_from_version
 from ome_zarr.io import parse_url
@@ -158,6 +159,8 @@ def add_raw_image(
     dim_names = [ax["name"] for ax in marshal_axes(image)]
     if fmt.zarr_format == 3:
         kwargs["dimension_names"] = dim_names
+    else:
+        kwargs["compressor"] = Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
     zarray = parent.require_array(
         path,
         shape=shape,
@@ -206,6 +209,7 @@ def add_raw_image(
                         if existing_data.max() == 0:
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
+                            print("----------------> Tile max:", tile.max())
                             zarray[tuple(indices)] = tile
 
     paths = [str(level) for level in range(level_count)]
@@ -244,6 +248,7 @@ def downsample_pyramid_on_disk(
         options = {"zarr_format": fmt.zarr_format}
         if fmt.zarr_format == 2:
             options["dimension_separator"] = "/"
+            options["compressor"] = Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
         else:
             options["chunk_key_encoding"] = fmt.chunk_key_encoding
             if dim_names is not None:
