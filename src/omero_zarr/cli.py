@@ -41,6 +41,7 @@ from .raw_pixels import (
     image_to_zarr,
     plate_to_zarr,
 )
+from .register import register_zarr
 
 HELP = """Export data in zarr format.
 
@@ -390,6 +391,7 @@ class ZarrControl(BaseControl):
     def register(self, args: argparse.Namespace) -> None:
         """Register a zarr file as an Image in OMERO."""
         print("Registering zarr file as an Image in OMERO", args.uri)
+        register_zarr(self.gateway, args)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int

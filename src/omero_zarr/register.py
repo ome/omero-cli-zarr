@@ -25,7 +25,6 @@ from urllib.parse import urlsplit
 import omero
 import zarr
 from numpy import finfo, iinfo
-from omero.cli import cli_login
 from omero.gateway import BlitzGateway
 from omero.model import ExternalInfoI
 from omero.model.enums import (
@@ -588,93 +587,56 @@ def link_to_target(
         print("Linked to Dataset", target.getId())
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("uri", type=str, help="The URI to the S3 store")
-    parser.add_argument(
-        "--endpoint",
-        required=False,
-        type=str,
-        help="Enter the URL endpoint if applicable",
-    )
-    parser.add_argument(
-        "--name", required=False, type=str, help="The name of the image/plate"
-    )
-    parser.add_argument(
-        "--nosignrequest",
-        required=False,
-        action="store_true",
-        help="Indicate to sign anonymously",
-    )
-    parser.add_argument(
-        "--target",
-        required=False,
-        type=str,
-        help="The id of the target (dataset/screen)",
-    )
-    parser.add_argument(
-        "--target-by-name",
-        required=False,
-        type=str,
-        help="The name of the target (dataset/screen)",
-    )
+def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
 
-    args = parser.parse_args()
+    uri = args.uri
+    endpoint = args.endpoint
+    nosignrequest = args.nosignrequest
+    validate_endpoint(endpoint)
+    store = None
+    if uri.startswith("/"):
+        store = zarr.storage.LocalStore(uri, read_only=True)
+    else:
+        storage_options: Dict[str, Any] = {}
+        if nosignrequest:
+            storage_options["anon"] = True
 
-    with cli_login() as cli:
-        conn = BlitzGateway(client_obj=cli._client)
-        uri = args.uri
-        endpoint = args.endpoint
-        nosignrequest = args.nosignrequest
-        validate_endpoint(endpoint)
-        store = None
-        if uri.startswith("/"):
-            store = zarr.storage.LocalStore(uri, read_only=True)
+        if endpoint:
+            storage_options["client_kwargs"] = {"endpoint_url": endpoint}
+
+        if FsspecStore is not None:
+            store = FsspecStore.from_url(
+                uri, read_only=True, storage_options=storage_options
+            )
         else:
-            storage_options: Dict[str, Any] = {}
-            if nosignrequest:
-                storage_options["anon"] = True
+            store = FSStore(uri, mode="r", **storage_options)
 
-            if endpoint:
-                storage_options["client_kwargs"] = {"endpoint_url": endpoint}
-
-            if FsspecStore is not None:
-                store = FsspecStore.from_url(
-                    uri, read_only=True, storage_options=storage_options
-                )
-            else:
-                store = FSStore(uri, mode="r", **storage_options)
-
-        zattrs = load_attrs(store)
-        objs = []
-        if "plate" in zattrs:
-            print("Registering: Plate")
-            objs = [register_plate(conn, store, args, zattrs)]
+    zattrs = load_attrs(store)
+    objs = []
+    if "plate" in zattrs:
+        print("Registering: Plate")
+        objs = [register_plate(conn, store, args, zattrs)]
+    else:
+        if zattrs.get("bioformats2raw.layout") == 3:
+            print("Registering: bioformats2raw.layout")
+            series = 0
+            series_exists = True
+            while series_exists:
+                try:
+                    print("Checking for series:", series)
+                    obj = register_image(
+                        conn, store, args, None, image_path=str(series)
+                    )
+                    objs.append(obj)
+                except zarr.errors.PathNotFoundError:
+                    # FileNotFoundError (zarr v3) or
+                    # zarr.errors.PathNotFoundError (zarr v2)
+                    series_exists = False
+                series += 1
         else:
-            if zattrs.get("bioformats2raw.layout") == 3:
-                print("Registering: bioformats2raw.layout")
-                series = 0
-                series_exists = True
-                while series_exists:
-                    try:
-                        print("Checking for series:", series)
-                        obj = register_image(
-                            conn, store, args, None, image_path=str(series)
-                        )
-                        objs.append(obj)
-                    except zarr.errors.PathNotFoundError:
-                        # FileNotFoundError (zarr v3) or
-                        # zarr.errors.PathNotFoundError (zarr v2)
-                        series_exists = False
-                    series += 1
-            else:
-                print("Registering: Image")
-                objs = [register_image(conn, store, args, zattrs)]
+            print("Registering: Image")
+            objs = [register_image(conn, store, args, zattrs)]
 
-        if args.target or args.target_by_name:
-            for obj in objs:
-                link_to_target(args, conn, obj)
-
-
-if __name__ == "__main__":
-    main()
+    if args.target or args.target_by_name:
+        for obj in objs:
+            link_to_target(args, conn, obj)
