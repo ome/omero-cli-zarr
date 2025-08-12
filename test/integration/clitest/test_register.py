@@ -1,0 +1,134 @@
+#!/usr/bin/env python
+
+#
+# Copyright (C) 2025 University of Dundee & Open Microscopy Environment.
+# All rights reserved.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+from typing import Any, Dict
+
+import pytest
+from omero.gateway import BlitzGateway
+from omero.testlib.cli import AbstractCLITest
+from omero_zarr.cli import ZarrControl
+
+SAMPLES: Dict[str, Dict[str, Any]] = {
+    "6001240.zarr": {
+        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
+        "dataset_name": "Test Register 6001240",
+    },
+    "13457227.zarr": {
+        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457227.zarr",
+    },
+    "13457227.zarr (s3)": {
+        "url": "s3://idr/zarr/v0.4/idr0101A/13457227.zarr",
+        "args": "--endpoint https://uk1s3.embassy.ebi.ac.uk/ --nosignrequest",
+    },
+    "CMU-1.ome.zarr": {
+        "url": (
+            "https://s3.us-east-1.amazonaws.com/"
+            "gs-public-zarr-archive/CMU-1.ome.zarr/0"
+        ),
+    },
+    # TODO: Haven't got this sample working with zarr v2 yet.
+    # See https://github.com/BioNGFF/omero-import-utils/pull/24
+    # "CMU-1.ome.zarr (s3)": {
+    #     "url": "s3://gs-public-zarr-archiv§e/CMU-1.ome.zarr/0",
+    #     "args": "--nosignrequest",
+    #     "series_count": 1,
+    # },
+    "LacZ_ctrl.zarr": {
+        "url": (
+            "https://storage.googleapis.com/"
+            "jax-public-ngff/example_v2/LacZ_ctrl.zarr"
+        ),
+        "series_count": 3,
+        "dataset_name": "Test Register LacZ_ctrl.zarr",
+    },
+    "9846151.zarr": {
+        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0048A/9846151.zarr/",
+    },
+}
+
+
+class TestRegister(AbstractCLITest):
+
+    def setup_method(self, method: str) -> None:
+        """Set up the test."""
+        self.args = self.login_args()
+        self.cli.register("zarr", ZarrControl, "TEST")
+        self.args += ["zarr"]
+
+    # register tests
+    # ========================================================================
+
+    @pytest.mark.parametrize("sample_id", SAMPLES.keys())
+    def test_register_images(
+        self, capsys: pytest.CaptureFixture, sample_id: str
+    ) -> None:
+        """Test register of a Zarr image."""
+
+        sample: Dict[str, Any] = SAMPLES[sample_id]
+
+        exp_args = [
+            "register",
+            sample["url"],
+        ]
+        if "args" in sample:
+            url_args = sample["args"].split(" ")
+            exp_args += url_args
+
+        # We test Dataset by Name or ID...
+        ds_name = sample.get("dataset_name", "Test Register Images")
+        dataset = self.make_dataset(ds_name)
+        if "dataset_name" in sample:
+            exp_args += ["--target-by-name", ds_name]
+        else:
+            # If no dataset name, we use the ID of the dataset we created
+            exp_args += ["--target", str(dataset.getId().val)]
+
+        self.cli.invoke(
+            self.args + exp_args,
+            strict=True,
+        )
+        out, err = capsys.readouterr()
+        lines = out.split("\n")
+        print(lines)
+        image_ids = []
+        datasets_linked = []
+        for line in lines:
+            if "Created Image" in line:
+                image_id = int(line.split(" ")[-1])
+                image_ids.append(image_id)
+            if "Linked to Dataset" in line:
+                dataset_id = int(line.split(" ")[-1])
+                datasets_linked.append(dataset_id)
+        # check we have created the expected number of images
+        assert len(image_ids) == sample.get("series_count", 1)
+        for img_id in image_ids:
+            image = self.query.get("Image", img_id)
+            assert image is not None, f"Image {img_id} not found"
+        assert len(datasets_linked) == len(image_ids)
+        ds_id = datasets_linked[0]
+        assert ds_id == dataset.getId().val
+
+        # check images are linked to dataset
+        conn = BlitzGateway(client_obj=self.client)
+        dataset = conn.getObject("Dataset", ds_id)
+        assert dataset is not None, f"Dataset {ds_id} not found"
+        ds_imgs = [img.id for img in dataset.listChildren()]
+        for img_id in image_ids:
+            assert img_id in ds_imgs

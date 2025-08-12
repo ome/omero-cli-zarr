@@ -630,7 +630,7 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                         conn, store, args, None, image_path=str(series)
                     )
                     objs.append(obj)
-                except FileNotFoundError:
+                except zarr.errors.PathNotFoundError:
                     # FIXME: FileNotFoundError (zarr v3) or
                     # zarr.errors.PathNotFoundError (zarr v2)
                     series_exists = False
