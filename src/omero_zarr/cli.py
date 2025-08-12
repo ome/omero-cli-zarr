@@ -49,6 +49,8 @@ Subcommands
 
  - export
  - masks
+ - polygons
+ - register
 
 """
 EXPORT_HELP = """Export an image in zarr format.
@@ -107,6 +109,11 @@ Options
 """
 
 POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
+
+REGISTER_HELP = """Create a new Image in OMERO from a zarr file.
+
+This requires omero-zarr-pixel-buffer to be installed on the server.
+"""
 
 
 def gateway_required(func: Callable) -> Callable:
@@ -326,6 +333,23 @@ class ZarrControl(BaseControl):
                 " max value for the dtype",
             )
 
+        # Register
+        register = parser.add(sub, self.register, REGISTER_HELP)
+        register.add_argument("uri")
+        register.add_argument(
+            "--endpoint", type=str, help="Enter the URL endpoint if applicable"
+        )
+        register.add_argument("--name", type=str, help="The name of the image/plate")
+        register.add_argument(
+            "--nosignrequest", action="store_true", help="Indicate to sign anonymously"
+        )
+        register.add_argument(
+            "--target", type=str, help="The id of the target (dataset/screen)"
+        )
+        register.add_argument(
+            "--target-by-name", type=str, help="The name of the target (dataset/screen)"
+        )
+
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:
         """Export masks on the Image as zarr files."""
@@ -361,6 +385,11 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+
+    @gateway_required
+    def register(self, args: argparse.Namespace) -> None:
+        """Register a zarr file as an Image in OMERO."""
+        print("Registering zarr file as an Image in OMERO", args.uri)
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
