@@ -192,20 +192,21 @@ class TestRender(AbstractCLITest):
         img_id = images[0].id.val
         size_xy = 512
 
-        # Create a mask
+        # Create a mask for each channel
         from skimage.data import binary_blobs
 
-        blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
-            "int8"
-        )
         red = [255, 0, 0, 255]
-        mask = mask_from_binary_image(blobs, rgba=red, z=0, c=0, t=0)
-
-        roi = RoiI()
-        roi.setImage(images[0])
-        roi.addShape(mask)
-        updateService = self.client.sf.getUpdateService()
-        updateService.saveAndReturnObject(roi)
+        green = [0, 255, 0, 255]
+        for ch, color in enumerate([red, green]):
+            blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
+                "int8"
+            )
+            mask = mask_from_binary_image(blobs, rgba=color, z=0, c=ch, t=0)
+            roi = RoiI()
+            roi.setImage(images[0])
+            roi.addShape(mask)
+            updateService = self.client.sf.getUpdateService()
+            updateService.saveAndReturnObject(roi)
 
         print("tmp_path", tmp_path)
 
@@ -232,19 +233,22 @@ class TestRender(AbstractCLITest):
         all_lines = ", ".join(lines)
         assert "Exporting to" in all_lines
         assert "Finished" in all_lines
-        assert "Found 1 mask shapes in 1 ROIs" in all_lines
+        assert "Found 2 mask shapes in 2 ROIs" in all_lines
 
         labels_text = (tmp_path / zarr_name / "labels" / "0" / ".zattrs").read_text(
             encoding="utf-8"
         )
         labels_json = json.loads(labels_text)
-        assert labels_json["image-label"]["colors"] == [{"label-value": 1, "rgba": red}]
+        assert labels_json["image-label"]["colors"] == [
+            {"label-value": 1, "rgba": red},
+            {"label-value": 2, "rgba": green},
+        ]
 
         arr_text = (tmp_path / zarr_name / "labels" / "0" / "0" / ".zarray").read_text(
             encoding="utf-8"
         )
         arr_json = json.loads(arr_text)
-        assert arr_json["shape"] == [1, 512, 512]
+        assert arr_json["shape"] == [2, 512, 512]
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_plate_polygons(

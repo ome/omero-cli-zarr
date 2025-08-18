@@ -293,12 +293,13 @@ class MaskSaver:
         # Figure out whether we can flatten some dimensions
         unique_dims: Dict[str, Set[int]] = {
             "T": {unwrap(mask.theT) for shapes in masks for mask in shapes},
+            "C": {unwrap(mask.theC) for shapes in masks for mask in shapes},
             "Z": {unwrap(mask.theZ) for shapes in masks for mask in shapes},
         }
         ignored_dimensions: Set[str] = set()
-        # We always ignore the C dimension
-        ignored_dimensions.add("C")
         print(f"Unique dimensions: {unique_dims}")
+        if unique_dims["C"] == {None} or len(unique_dims["C"]) == 1:
+            ignored_dimensions.add("C")
 
         for d in "TZ":
             if unique_dims[d] == {None}:
@@ -308,8 +309,6 @@ class MaskSaver:
 
         # Verify that we are linking this mask to a real ome-zarr
         source_image = self.source_image
-        print(f"source_image ??? needs to be None to use filename: {source_image}")
-        print(f"filename: {filename}", self.output, self.name_by)
         source_image_link = self.source_image
         if source_image is None:
             # Assume that we're using the output directory
@@ -320,11 +319,11 @@ class MaskSaver:
             assert self.plate_path, "Need image path within the plate"
             source_image = f"{source_image}/{self.plate_path}"
 
-        print(f"source_image {source_image}")
         image_path = source_image
         if self.output:
             image_path = os.path.join(self.output, source_image)
         src = parse_url(image_path)
+        print(f"Writing labels to image at: {image_path}")
         assert src, f"Source image does not exist at {image_path}"
         input_pyramid = Node(src, [])
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
@@ -578,7 +577,7 @@ class MaskSaver:
                                 if check_overlaps:
                                     raise Exception(
                                         f"Shape {shape.roi.id.val} overlaps "
-                                        "with existing labels"
+                                        "with existing labels. Use --overlaps=dtype_max"
                                     )
                                 else:
                                     # set overlapping region to max(dtype)
