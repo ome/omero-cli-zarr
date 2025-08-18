@@ -1,8 +1,8 @@
-# 0.6.1 (June 2024)
+# 0.6.1 (June 2025)
 
 - Fix version
 
-# 0.6.0 (June 2024)
+# 0.6.0 (June 2025)
 
 - Support --name_by option ([#147](https://github.com/ome/omero-cli-zarr/pull/147))
 - Fix export of Plate labels ([#173](https://github.com/ome/omero-cli-zarr/pull/173))
