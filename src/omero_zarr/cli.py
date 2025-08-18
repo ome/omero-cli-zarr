@@ -316,7 +316,7 @@ class ZarrControl(BaseControl):
                 "--output", type=str, default="", help="The output directory"
             )
             subcommand.add_argument(
-                "--version",
+                "--format",
                 type=str,
                 choices=["0.4", "0.5"],
                 help="OME-Zarr version. Default is '0.5'",
@@ -361,11 +361,11 @@ class ZarrControl(BaseControl):
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
             if args.bf or args.bfpath:
-                if args.version and args.version != "0.4":
+                if args.format and args.format != "0.4":
                     self.ctx.die(
                         110,
-                        "bioformats2raw does not support OME-Zarr version %s"
-                        % args.version,
+                        "bioformats2raw does not support OME-Zarr format %s"
+                        % args.format,
                     )
                 self._bf_export(image, args)
             else:

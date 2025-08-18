@@ -59,8 +59,8 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     tile_width = args.tile_width
     tile_height = args.tile_height
     name = get_zarr_name(image, args.output, args.name_by)
-    if args.version is not None:
-        fmt = format_from_version(args.version)
+    if args.format is not None:
+        fmt = format_from_version(args.format)
     else:
         fmt = CurrentFormat()
     print(f"Exporting to {name} ({fmt.version})")
@@ -295,8 +295,8 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
     # store = open_store(name)
 
-    if args.version is not None:
-        fmt = format_from_version(args.version)
+    if args.format is not None:
+        fmt = format_from_version(args.format)
     else:
         fmt = CurrentFormat()
     # Use fmt=FormatV04() in parse_url() to write v0.4 format (zarr v2)

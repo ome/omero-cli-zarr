@@ -91,6 +91,7 @@ def plate_shapes_to_zarr(
         args.overlaps,
         args.output,
         args.name_by,
+        args.format,
     )
 
     count = 0
@@ -190,7 +191,7 @@ def image_shapes_to_zarr(
             args.overlaps,
             args.output,
             args.name_by,
-            args.version,
+            args.format,
         )
 
         if args.style == "split":
@@ -227,7 +228,7 @@ class MaskSaver:
         overlaps: str = "error",
         output: Optional[str] = None,
         name_by: str = "id",
-        version: Optional[str] = None,
+        ome_zarr_fmt: Optional[str] = None,
     ) -> None:
         self.dtype = dtype
         self.path = path
@@ -238,7 +239,7 @@ class MaskSaver:
         self.overlaps = overlaps
         self.output = output
         self.name_by = name_by
-        self.version = version
+        self.format = ome_zarr_fmt
         if image:
             self.image = image
             self.size_t = image.getSizeT()
@@ -328,8 +329,8 @@ class MaskSaver:
         assert input_pyramid.load(Multiscales), "No multiscales metadata found"
         input_pyramid_levels = len(input_pyramid.data)
 
-        if self.version is not None:
-            fmt = format_from_version(self.version)
+        if self.format is not None:
+            fmt = format_from_version(self.format)
         else:
             fmt = CurrentFormat()
         store = parse_url(image_path, mode="w", fmt=fmt).store
