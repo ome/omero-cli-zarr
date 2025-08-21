@@ -39,16 +39,7 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring, rtime
-
-try:
-    # zarr >= 3.0.0
-    from zarr.storage import FsspecStore
-except ImportError:
-    # zarr 2
-    from zarr.storage import FSStore
-
-    FsspecStore = None
-
+from zarr.storage import FSStore
 
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
 
@@ -86,7 +77,7 @@ def format_s3_uri(uri: str, endpoint: str) -> str:
 def load_array(
     store: zarr.storage.Store, path: Optional[str] = None
 ) -> zarr.core.Array:
-    arr = zarr.open(store=store, mode="r", path=path)
+    arr = zarr.open_array(store=store, mode="r", path=path)
     return arr
 
 
@@ -94,7 +85,7 @@ def load_attrs(store: zarr.storage.Store, path: Optional[str] = None) -> dict:
     """
     Load the attrs from the root group or path subgroup
     """
-    root = zarr.open(store=store, mode="r", path=path)
+    root = zarr.open_group(store=store, mode="r", path=path)
     attrs = root.attrs.asdict()
     if "ome" in attrs:
         attrs = attrs["ome"]
@@ -606,12 +597,12 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
         if endpoint:
             storage_options["client_kwargs"] = {"endpoint_url": endpoint}
 
-        if FsspecStore is not None:
-            store = FsspecStore.from_url(
-                uri, read_only=True, storage_options=storage_options
-            )
-        else:
-            store = FSStore(uri, mode="r", **storage_options)
+        # if FsspecStore is not None:
+        #     store = FsspecStore.from_url(
+        #         uri, read_only=True, storage_options=storage_options
+        #     )
+        # else:
+        store = FSStore(uri, mode="r", **storage_options)
 
     zattrs = load_attrs(store)
     objs = []
@@ -630,7 +621,7 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                         conn, store, args, None, image_path=str(series)
                     )
                     objs.append(obj)
-                except zarr.errors.PathNotFoundError:
+                except (zarr.errors.PathNotFoundError, zarr.errors.GroupNotFoundError):
                     # FIXME: FileNotFoundError (zarr v3) or
                     # zarr.errors.PathNotFoundError (zarr v2)
                     series_exists = False
