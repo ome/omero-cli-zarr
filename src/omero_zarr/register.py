@@ -39,6 +39,10 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring, rtime
+from zarr.core import Array
+from zarr.creation import open_array
+from zarr.errors import ArrayNotFoundError, GroupNotFoundError
+from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
@@ -74,18 +78,15 @@ def format_s3_uri(uri: str, endpoint: str) -> str:
     return f"{parsed_uri.scheme}" + "://" + endpoint + "/" + url + f"{parsed_uri.path}"
 
 
-def load_array(
-    store: zarr.storage.Store, path: Optional[str] = None
-) -> zarr.core.Array:
-    arr = zarr.open_array(store=store, mode="r", path=path)
-    return arr
+def load_array(store: zarr.storage.Store, path: Optional[str] = None) -> Array:
+    return open_array(store=store, mode="r", path=path)
 
 
-def load_attrs(store: zarr.storage.Store, path: Optional[str] = None) -> dict:
+def load_attrs(store: zarr.storage.StoreLike, path: Optional[str] = None) -> dict:
     """
     Load the attrs from the root group or path subgroup
     """
-    root = zarr.open_group(store=store, mode="r", path=path)
+    root = open_group(store=store, mode="r", path=path)
     attrs = root.attrs.asdict()
     if "ome" in attrs:
         attrs = attrs["ome"]
@@ -581,7 +582,6 @@ def link_to_target(
 
 
 def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
-
     uri = args.uri
     endpoint = args.endpoint
     nosignrequest = args.nosignrequest
@@ -621,7 +621,7 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                         conn, store, args, None, image_path=str(series)
                     )
                     objs.append(obj)
-                except (zarr.errors.PathNotFoundError, zarr.errors.GroupNotFoundError):
+                except (ArrayNotFoundError, GroupNotFoundError):
                     # FIXME: FileNotFoundError (zarr v3) or
                     # zarr.errors.PathNotFoundError (zarr v2)
                     series_exists = False
