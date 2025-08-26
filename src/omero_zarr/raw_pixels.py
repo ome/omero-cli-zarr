@@ -49,7 +49,8 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import unwrap
-from zarr import Group, open_group
+from zarr.api.synchronous import open_group
+from zarr.core.group import Group
 
 from . import __version__
 from .util import get_zarr_name, marshal_axes, marshal_transformations, print_status

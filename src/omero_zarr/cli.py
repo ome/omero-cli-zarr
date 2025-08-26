@@ -26,7 +26,7 @@ from typing import Any, Callable, List
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
-from zarr import open_group
+from zarr.api.synchronous import open_group
 from zarr.storage import LocalStore
 
 from .masks import (

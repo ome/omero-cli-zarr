@@ -37,7 +37,7 @@ from ome_zarr.writer import write_multiscale_labels
 from omero.model import MaskI, PolygonI
 from omero.rtypes import unwrap
 from skimage.draw import polygon as sk_polygon
-from zarr import open_group
+from zarr.api.synchronous import open_group
 
 from .util import get_zarr_name, marshal_axes, marshal_transformations, print_status
 
