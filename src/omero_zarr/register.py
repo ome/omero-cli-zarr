@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import omero
 import zarr
 from numpy import finfo, iinfo
-from omero.gateway import BlitzGateway
+from omero.gateway import BlitzGateway, ImageWrapper
 from omero.model import ExternalInfoI
 from omero.model.enums import (
     PixelsTypecomplex,
@@ -45,6 +45,13 @@ from zarr.errors import ArrayNotFoundError, GroupNotFoundError
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .import_xml import full_import
+
+# TODO: support Zarr v3 - imports for get_omexml_bytes()
+# from zarr.core.buffer import default_buffer_prototype
+# from zarr.core.sync import sync
+
+
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
 
 PIXELS_TYPE = {
@@ -62,6 +69,18 @@ PIXELS_TYPE = {
     "complex_": PixelsTypecomplex,
     "complex64": PixelsTypecomplex,
 }
+
+
+def get_omexml_bytes(store: zarr.storage.Store) -> Optional[bytes]:
+    # Zarr v3 get() is async. Need to sync to get the bytes
+    # rsp = store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype())
+    # result = sync(rsp)
+    # if result is None:
+    #     return None
+    # return result.to_bytes()
+
+    # Zarr v2
+    return store.get("OME/METADATA.ome.xml")
 
 
 def format_s3_uri(uri: str, endpoint: str) -> str:
@@ -160,13 +179,10 @@ def create_image(
 
     rnd_def = None
     image = conn.getObject("Image", iid)
-    omero_attrs = image_attrs.get("omero", None)
-    if omero_attrs is not None:
-        set_channel_names(conn, iid, omero_attrs)
-        # Check rendering settings
-        rnd_def = set_rendering_settings(
-            omero_attrs, pixels_type, image.getPixelsId(), families, models
-        )
+    # Set rendering settings and channel names if omero_attrs is provided
+    rnd_def = set_rendering_settings(
+        conn, image, image_attrs, pixels_type, families, models
+    )
 
     img_obj = image._obj
     set_external_info(img_obj, args, image_path)
@@ -205,13 +221,30 @@ def set_channel_names(conn: BlitzGateway, iid: int, omero_attrs: dict) -> None:
 
 
 def set_rendering_settings(
-    omero_info: dict, pixels_type: str, pixels_id: int, families: list, models: list
-) -> omero.model.RenderingDefI:
+    conn: BlitzGateway,
+    image: ImageWrapper,
+    image_attrs: dict,
+    pixels_type: str,
+    families: Optional[list] = None,
+    models: Optional[list] = None,
+) -> Optional[omero.model.RenderingDefI]:
     """
     Extract the rendering settings and the channels information
     """
+    omero_info = image_attrs.get("omero", None)
     if omero_info is None:
-        return
+        return None
+    set_channel_names(conn, image.id, omero_info)
+
+    if families is None:
+        families = load_families(conn)
+    if models is None:
+        models = load_models(conn)
+
+    pixels_id = image.getPrimaryPixels().getId()
+
+    if omero_info is None:
+        return None
     rdefs = omero_info.get("rdefs", None)
     if rdefs is None:
         rdefs = dict()
@@ -554,9 +587,15 @@ def link_to_target(
 
     if args.target:
         if is_plate:
-            target = conn.getObject("Screen", attributes={"id": int(args.target)})
+            screen_id = args.target
+            if screen_id.startswith("Screen:"):
+                screen_id = screen_id.split(":")[1]
+            target = conn.getObject("Screen", attributes={"id": int(screen_id)})
         else:
-            target = conn.getObject("Dataset", attributes={"id": int(args.target)})
+            dataset_id = args.target
+            if dataset_id.startswith("Dataset:"):
+                dataset_id = dataset_id.split(":")[1]
+            target = conn.getObject("Dataset", attributes={"id": int(dataset_id)})
     else:
         if is_plate:
             target = conn.getObject("Screen", attributes={"name": args.target_by_name})
@@ -612,20 +651,52 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
     else:
         if zattrs.get("bioformats2raw.layout") == 3:
             print("Registering: bioformats2raw.layout")
-            series = 0
-            series_exists = True
-            while series_exists:
-                try:
-                    print("Checking for series:", series)
-                    obj = register_image(
-                        conn, store, args, None, image_path=str(series)
+            zarr_name = args.uri.rstrip("/").split("/")[-1]
+            if args.name:
+                zarr_name = args.name
+            # try to load OME/METADATA.ome.xml
+            omexml_bytes = get_omexml_bytes(store)
+            if omexml_bytes is not None:
+                print("Importing OME/METADATA.ome.xml")
+                rsp = full_import(conn.c, omexml_bytes, args.wait)
+                for series, p in enumerate(rsp.pixels):
+                    # set external info.
+                    # NB: order of pixels MUST match the series 0, 1, 2...
+                    image = conn.getObject("Image", p.image.id.val)
+                    image_path = str(series)
+                    image_attrs = load_attrs(store, image_path)
+                    # pixels_type is only used if we have *incomplete* `omero` metadata
+                    sizes, pixels_type = parse_image_metadata(
+                        store, image_attrs, image_path
                     )
-                    objs.append(obj)
-                except (ArrayNotFoundError, GroupNotFoundError):
-                    # FIXME: FileNotFoundError (zarr v3) or
-                    # zarr.errors.PathNotFoundError (zarr v2)
-                    series_exists = False
-                series += 1
+                    rnd_def = set_rendering_settings(
+                        conn, image, image_attrs, pixels_type
+                    )
+                    if rnd_def is not None:
+                        conn.getUpdateService().saveAndReturnObject(rnd_def)
+                    set_external_info(image._obj, args, image_path=image_path)
+                    # default name is METADATA.ome.xml [series], based on clientPath?
+                    new_name = image.name.replace("METADATA.ome.xml", zarr_name)
+                    print("Imported Image:", image.id)
+                    image.setName(new_name)
+                    image.save()  # save Name and ExternalInfo
+                    objs.append(image)
+            else:
+                print("OME/METADATA.ome.xml Not Found")
+                series = 0
+                series_exists = True
+                while series_exists:
+                    try:
+                        print("Checking for series:", series)
+                        obj = register_image(
+                            conn, store, args, None, image_path=str(series)
+                        )
+                        objs.append(obj)
+                    except (ArrayNotFoundError, GroupNotFoundError):
+                        # FIXME: FileNotFoundError (zarr v3) or
+                        # zarr.errors.PathNotFoundError (zarr v2)
+                        series_exists = False
+                    series += 1
         else:
             print("Registering: Image")
             objs = [register_image(conn, store, args, zattrs)]

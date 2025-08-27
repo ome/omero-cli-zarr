@@ -350,6 +350,16 @@ class ZarrControl(BaseControl):
         register.add_argument(
             "--target-by-name", type=str, help="The name of the target (dataset/screen)"
         )
+        register.add_argument(
+            "--wait",
+            type=int,
+            default=-1,
+            help=(
+                "Wait for this number of seconds for each import to complete. "
+                "0: return immediately, -1: wait indefinitely (default). "
+                "Only applies when importing OME/METADATA.ome.xml."
+            ),
+        )
 
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:

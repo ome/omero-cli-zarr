@@ -110,7 +110,7 @@ class TestRegister(AbstractCLITest):
         image_ids = []
         datasets_linked = []
         for line in lines:
-            if "Created Image" in line:
+            if "Created Image" in line or "Imported Image" in line:
                 image_id = int(line.split(" ")[-1])
                 image_ids.append(image_id)
             if "Linked to Dataset" in line:
