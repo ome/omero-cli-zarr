@@ -55,6 +55,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
             "https://storage.googleapis.com/"
             "jax-public-ngff/example_v2/LacZ_ctrl.zarr"
         ),
+        "pixel_sizes_x": [0.23, 0.45, 0.91],
         "series_count": 3,
         "dataset_name": "Test Register LacZ_ctrl.zarr",
     },
@@ -132,3 +133,16 @@ class TestRegister(AbstractCLITest):
         ds_imgs = [img.id for img in dataset.listChildren()]
         for img_id in image_ids:
             assert img_id in ds_imgs
+
+        if "pixel_sizes_x" in sample:
+            # check pixel sizes
+            for i, img_id in enumerate(image_ids):
+                image = conn.getObject("Image", img_id)
+                pixels = image.getPrimaryPixels()
+                size_x = pixels.getSizeX()
+                phys_size_x = pixels.getPhysicalSizeX().getValue()
+                exp_size_x = sample["pixel_sizes_x"][i]
+                assert abs(phys_size_x - exp_size_x) < 0.01, (
+                    f"Image {img_id} sizeX {size_x} physSizeX {phys_size_x} != "
+                    f"expected {exp_size_x}"
+                )
