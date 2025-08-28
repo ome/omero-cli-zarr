@@ -345,7 +345,12 @@ class ZarrControl(BaseControl):
             "--nosignrequest", action="store_true", help="Indicate to sign anonymously"
         )
         register.add_argument(
-            "--target", type=str, help="The id of the target (dataset/screen)"
+            "--target",
+            type=str,
+            help=(
+                "The id of the target (dataset/screen), "
+                "or Dataset:<id> or Screen:<id>"
+            ),
         )
         register.add_argument(
             "--target-by-name", type=str, help="The name of the target (dataset/screen)"

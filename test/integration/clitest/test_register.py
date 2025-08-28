@@ -18,12 +18,14 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+from random import random
 from typing import Any, Dict
 
 import pytest
 from omero.gateway import BlitzGateway
 from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
+from omero_zarr.register import register_zarr
 
 SAMPLES: Dict[str, Dict[str, Any]] = {
     "6001240.zarr": {
@@ -77,59 +79,74 @@ class TestRegister(AbstractCLITest):
     # ========================================================================
 
     @pytest.mark.parametrize("sample_id", SAMPLES.keys())
+    @pytest.mark.parametrize("invoke", ["api", "cli"])
     def test_register_images(
-        self, capsys: pytest.CaptureFixture, sample_id: str
+        self, capsys: pytest.CaptureFixture, sample_id: str, invoke: str
     ) -> None:
         """Test register of a Zarr image."""
 
         sample: Dict[str, Any] = SAMPLES[sample_id]
-
-        exp_args = [
-            "register",
-            sample["url"],
-        ]
-        if "args" in sample:
-            url_args = sample["args"].split(" ")
-            exp_args += url_args
+        conn = BlitzGateway(client_obj=self.client)
 
         # We test Dataset by Name or ID...
         ds_name = sample.get("dataset_name", "Test Register Images")
+        ds_name += str(random())
         dataset = self.make_dataset(ds_name)
-        if "dataset_name" in sample:
-            exp_args += ["--target-by-name", ds_name]
-        else:
-            # If no dataset name, we use the ID of the dataset we created
-            exp_args += ["--target", str(dataset.getId().val)]
 
-        self.cli.invoke(
-            self.args + exp_args,
-            strict=True,
-        )
-        out, err = capsys.readouterr()
-        lines = out.split("\n")
-        print(lines)
-        image_ids = []
-        datasets_linked = []
-        for line in lines:
-            if "Created Image" in line or "Imported Image" in line:
-                image_id = int(line.split(" ")[-1])
-                image_ids.append(image_id)
-            if "Linked to Dataset" in line:
-                dataset_id = int(line.split(" ")[-1])
-                datasets_linked.append(dataset_id)
+        if invoke == "cli":
+            exp_args = [
+                "register",
+                sample["url"],
+            ]
+            if "args" in sample:
+                url_args = sample["args"].split(" ")
+                exp_args += url_args
+
+            if "dataset_name" in sample:
+                exp_args += ["--target-by-name", ds_name]
+            else:
+                # If no dataset name, we use the ID of the dataset we created
+                exp_args += ["--target", str(dataset.getId().val)]
+
+            self.cli.invoke(
+                self.args + exp_args,
+                strict=True,
+            )
+            out, err = capsys.readouterr()
+            lines = out.split("\n")
+            print(lines)
+            image_ids = []
+            for line in lines:
+                if "Created Image" in line or "Imported Image" in line:
+                    image_id = int(line.split(" ")[-1])
+                    image_ids.append(image_id)
+
+        else:
+            # import via api
+            kwargs = {}
+            if "args" in sample:
+                url_args = sample["args"].split(" ")
+                kwargs[url_args[0].replace("--", "")] = url_args[1]
+                if "--nosignrequest" in url_args:
+                    kwargs["nosignrequest"] = True
+            if "dataset_name" in sample:
+                kwargs["target_by_name"] = ds_name
+            else:
+                # If no dataset name, we use the ID of the dataset we created
+                kwargs["target"] = str(dataset.getId().val)
+
+            objs = register_zarr(conn, sample["url"], **kwargs)
+            image_ids = [obj.id.val for obj in objs]
+
         # check we have created the expected number of images
         assert len(image_ids) == sample.get("series_count", 1)
         for img_id in image_ids:
             image = self.query.get("Image", img_id)
             assert image is not None, f"Image {img_id} not found"
-        assert len(datasets_linked) == len(image_ids)
-        ds_id = datasets_linked[0]
-        assert ds_id == dataset.getId().val
 
         # check images are linked to dataset
-        conn = BlitzGateway(client_obj=self.client)
-        dataset = conn.getObject("Dataset", ds_id)
-        assert dataset is not None, f"Dataset {ds_id} not found"
+        dataset = conn.getObject("Dataset", dataset.id.val)
+        assert dataset is not None, "Dataset not found"
         ds_imgs = [img.id for img in dataset.listChildren()]
         for img_id in image_ids:
             assert img_id in ds_imgs

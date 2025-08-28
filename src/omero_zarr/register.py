@@ -582,23 +582,26 @@ def link_to_target(
 ) -> None:
     is_plate = isinstance(obj, omero.model.PlateI)
 
+    target = None
     if kwargs.get("target"):
+        object_id = kwargs["target"]
+        if ":" in object_id:
+            object_id = object_id.split(":")[1]
         if is_plate:
-            screen_id = kwargs["target"]
-            if screen_id.startswith("Screen:"):
-                screen_id = screen_id.split(":")[1]
-            target = conn.getObject("Screen", attributes={"id": int(screen_id)})
+            target = conn.getObject("Screen", int(object_id))
         else:
-            dataset_id = kwargs["target"]
-            if dataset_id.startswith("Dataset:"):
-                dataset_id = dataset_id.split(":")[1]
-            target = conn.getObject("Dataset", attributes={"id": int(dataset_id)})
+            target = conn.getObject("Dataset", int(object_id))
     elif kwargs.get("target_by_name"):
         tname = kwargs["target_by_name"]
         if is_plate:
-            target = conn.getObject("Screen", attributes={"name": tname})
+            objs = list(conn.getObjects("Screen", attributes={"name": tname}))
         else:
-            target = conn.getObject("Dataset", attributes={"name": tname})
+            objs = list(conn.getObjects("Dataset", attributes={"name": tname}))
+        if len(objs) == 0:
+            print("Target not found")
+            return
+        # If multiple targets match by name, use the first one
+        target = objs[0]
 
     if target is None:
         print("Target not found")
@@ -686,7 +689,7 @@ def register_zarr(
                     print("Imported Image:", image.id)
                     image.setName(new_name)
                     image.save()  # save Name and ExternalInfo
-                    objs.append(image)
+                    objs.append(image._obj)
             else:
                 print("OME/METADATA.ome.xml Not Found")
                 series = 0
