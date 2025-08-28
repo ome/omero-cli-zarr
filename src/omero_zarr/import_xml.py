@@ -141,6 +141,7 @@ def full_import(
     print(proc.__class__)
     try:
         # do the upload and trigger the import
+        wait = wait if wait is not None else -1
         return assert_import(client, proc, omexml_bytes, wait)
     finally:
         proc.close()

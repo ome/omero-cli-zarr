@@ -18,7 +18,6 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import argparse
 from typing import Any, Dict, Optional, Union
 from urllib.parse import urlsplit
 
@@ -146,7 +145,7 @@ def create_image(
     object_name: str,
     families: list,
     models: list,
-    args: argparse.Namespace,
+    kwargs: dict,
     image_path: Optional[str] = None,
 ) -> tuple:
     """
@@ -185,7 +184,7 @@ def create_image(
     )
 
     img_obj = image._obj
-    set_external_info(img_obj, args, image_path)
+    set_external_info(img_obj, kwargs, image_path)
 
     return img_obj, rnd_def
 
@@ -337,7 +336,7 @@ def load_models(conn: BlitzGateway) -> list:
 def register_image(
     conn: BlitzGateway,
     store: zarr.storage.Store,
-    args: argparse.Namespace,
+    kwargs: dict,
     img_attrs: Optional[dict] = None,
     image_path: Optional[str] = None,
 ) -> tuple:
@@ -351,12 +350,12 @@ def register_image(
 
     if img_attrs is None:
         img_attrs = load_attrs(store, image_path)
-    if args.name:
-        image_name = args.name
+    if kwargs and kwargs.get("name"):
+        image_name = kwargs["name"]
     elif "name" in img_attrs:
         image_name = img_attrs["name"]
     else:
-        image_name = args.uri.rstrip("/").split("/")[-1]
+        image_name = kwargs.get("uri", "").rstrip("/").split("/")[-1]
         if image_path is not None:
             image_name = f"{image_name} [{image_path}]"
     image, rnd_def = create_image(
@@ -366,7 +365,7 @@ def register_image(
         image_name,
         families,
         models,
-        args,
+        kwargs=kwargs,
         image_path=image_path,
     )
     update_service.saveAndReturnObject(image)
@@ -407,7 +406,7 @@ def create_plate_acquisition(pa: dict) -> omero.model.PlateAcquisitionI:
 
 
 def register_plate(
-    conn: BlitzGateway, store: zarr.storage.Store, args: argparse.Namespace, attrs: dict
+    conn: BlitzGateway, store: zarr.storage.Store, attrs: dict, kwargs: dict
 ) -> omero.model.PlateI:
     """
     Register a plate
@@ -415,11 +414,11 @@ def register_plate(
 
     plate_attrs = attrs["plate"]
 
-    object_name = args.name
+    object_name = kwargs.get("name", None)
     if object_name is None:
         object_name = plate_attrs.get("name", None)
     if object_name is None:
-        object_name = args.uri.rstrip("/").split("/")[-1].split(".")[0]
+        object_name = kwargs["uri"].rstrip("/").split("/")[-1].split(".")[0]
 
     update_service = conn.getUpdateService()
     families = load_families(conn)
@@ -483,7 +482,7 @@ def register_plate(
             image_name = img_attrs.get("name", f"{well_path}/{sample_attrs['path']}")
 
             image, rnd_def = create_image(
-                conn, store, img_attrs, image_name, families, models, args, image_path
+                conn, store, img_attrs, image_name, families, models, kwargs, image_path
             )
 
             images_to_save.append(image)
@@ -512,7 +511,7 @@ def register_plate(
 
 def set_external_info(
     image: omero.model.ImageI,
-    args: argparse.Namespace,
+    kwargs: dict,
     image_path: Optional[str] = None,
 ) -> None:
     """
@@ -523,9 +522,9 @@ def set_external_info(
     setattr(extinfo, "entityId", rlong(3))
     setattr(extinfo, "entityType", rstring("com.glencoesoftware.ngff:multiscales"))
 
-    uri = args.uri
-    endpoint = args.endpoint
-    nosignrequest = args.nosignrequest
+    uri = kwargs.get("uri", "")
+    endpoint = kwargs.get("endpoint", "")
+    nosignrequest = kwargs.get("nosignrequest", False)
 
     if image_path is not None:
         uri = uri.rstrip("/") + "/" + image_path
@@ -579,28 +578,27 @@ def validate_endpoint(endpoint: Optional[str]) -> None:
 
 
 def link_to_target(
-    args: argparse.Namespace,
-    conn: BlitzGateway,
-    obj: Union[omero.model.PlateI, omero.model.ImageI],
+    conn: BlitzGateway, obj: Union[omero.model.PlateI, omero.model.ImageI], kwargs: dict
 ) -> None:
     is_plate = isinstance(obj, omero.model.PlateI)
 
-    if args.target:
+    if kwargs.get("target"):
         if is_plate:
-            screen_id = args.target
+            screen_id = kwargs["target"]
             if screen_id.startswith("Screen:"):
                 screen_id = screen_id.split(":")[1]
             target = conn.getObject("Screen", attributes={"id": int(screen_id)})
         else:
-            dataset_id = args.target
+            dataset_id = kwargs["target"]
             if dataset_id.startswith("Dataset:"):
                 dataset_id = dataset_id.split(":")[1]
             target = conn.getObject("Dataset", attributes={"id": int(dataset_id)})
-    else:
+    elif kwargs.get("target_by_name"):
+        tname = kwargs["target_by_name"]
         if is_plate:
-            target = conn.getObject("Screen", attributes={"name": args.target_by_name})
+            target = conn.getObject("Screen", attributes={"name": tname})
         else:
-            target = conn.getObject("Dataset", attributes={"name": args.target_by_name})
+            target = conn.getObject("Dataset", attributes={"name": tname})
 
     if target is None:
         print("Target not found")
@@ -620,10 +618,16 @@ def link_to_target(
         print("Linked to Dataset", target.getId())
 
 
-def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
-    uri = args.uri
-    endpoint = args.endpoint
-    nosignrequest = args.nosignrequest
+def register_zarr(conn: BlitzGateway, uri: str, **kwargs: Any) -> None:
+    # All connection params are in kwargs so they can be easily
+    # passed through to e.g. set_external_info
+    kwargs = kwargs.copy()  # avoid modifying caller's dict
+    kwargs["uri"] = uri
+
+    endpoint = kwargs.get("endpoint")
+    if endpoint is not None:
+        endpoint = str(endpoint)
+    nosignrequest = kwargs.get("nosignrequest", False)
     validate_endpoint(endpoint)
     store = None
     if uri.startswith("/"):
@@ -647,18 +651,18 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
     objs = []
     if "plate" in zattrs:
         print("Registering: Plate")
-        objs = [register_plate(conn, store, args, zattrs)]
+        objs = [register_plate(conn, store, zattrs, kwargs)]
     else:
         if zattrs.get("bioformats2raw.layout") == 3:
             print("Registering: bioformats2raw.layout")
-            zarr_name = args.uri.rstrip("/").split("/")[-1]
-            if args.name:
-                zarr_name = args.name
+            zarr_name = kwargs.get("uri", "").rstrip("/").split("/")[-1]
+            if kwargs.get("name"):
+                zarr_name = kwargs.get("name")
             # try to load OME/METADATA.ome.xml
             omexml_bytes = get_omexml_bytes(store)
             if omexml_bytes is not None:
                 print("Importing OME/METADATA.ome.xml")
-                rsp = full_import(conn.c, omexml_bytes, args.wait)
+                rsp = full_import(conn.c, omexml_bytes, kwargs.get("wait", -1))
                 for series, p in enumerate(rsp.pixels):
                     # set external info.
                     # NB: order of pixels MUST match the series 0, 1, 2...
@@ -674,7 +678,7 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                     )
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
-                    set_external_info(image._obj, args, image_path=image_path)
+                    set_external_info(image._obj, kwargs, image_path=image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
                     print("Imported Image:", image.id)
@@ -689,7 +693,7 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                     try:
                         print("Checking for series:", series)
                         obj = register_image(
-                            conn, store, args, None, image_path=str(series)
+                            conn, store, kwargs, None, image_path=str(series)
                         )
                         objs.append(obj)
                     except (ArrayNotFoundError, GroupNotFoundError):
@@ -699,8 +703,8 @@ def register_zarr(conn: BlitzGateway, args: argparse.Namespace) -> None:
                     series += 1
         else:
             print("Registering: Image")
-            objs = [register_image(conn, store, args, zattrs)]
+            objs = [register_image(conn, store, kwargs, zattrs)]
 
-    if args.target or args.target_by_name:
+    if kwargs.get("target") or kwargs.get("target_by_name"):
         for obj in objs:
-            link_to_target(args, conn, obj)
+            link_to_target(conn, obj, kwargs=kwargs)

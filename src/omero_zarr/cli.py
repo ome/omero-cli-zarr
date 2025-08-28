@@ -401,7 +401,16 @@ class ZarrControl(BaseControl):
     def register(self, args: argparse.Namespace) -> None:
         """Register a zarr file as an Image in OMERO."""
         print("Registering zarr file as an Image in OMERO", args.uri)
-        register_zarr(self.gateway, args)
+        register_zarr(
+            self.gateway,
+            uri=args.uri,
+            endpoint=args.endpoint,
+            nosignrequest=args.nosignrequest,
+            name=args.name,
+            target=args.target,
+            target_by_name=args.target_by_name,
+            wait=args.wait,
+        )
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
