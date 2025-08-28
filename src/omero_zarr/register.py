@@ -18,7 +18,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlsplit
 
 import omero
@@ -618,7 +618,9 @@ def link_to_target(
         print("Linked to Dataset", target.getId())
 
 
-def register_zarr(conn: BlitzGateway, uri: str, **kwargs: Any) -> None:
+def register_zarr(
+    conn: BlitzGateway, uri: str, **kwargs: Any
+) -> List[Union[omero.model.PlateI, omero.model.ImageI]]:
     # All connection params are in kwargs so they can be easily
     # passed through to e.g. set_external_info
     kwargs = kwargs.copy()  # avoid modifying caller's dict
@@ -708,3 +710,5 @@ def register_zarr(conn: BlitzGateway, uri: str, **kwargs: Any) -> None:
     if kwargs.get("target") or kwargs.get("target_by_name"):
         for obj in objs:
             link_to_target(conn, obj, kwargs=kwargs)
+
+    return objs
