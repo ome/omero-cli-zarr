@@ -90,10 +90,9 @@ def upload_file(
         # create temp file for sha1
         # error: No overload variant of "NamedTemporaryFile" matches argument
         # type "bool" [call-overload]
-        with tempfile.NamedTemporaryFile(delete_on_close=False) as fp:  # type: ignore
+        with tempfile.NamedTemporaryFile(delete=False) as fp:  # type: ignore
             fp.write(omexml_bytes)
-            fp.close()
-            ret_val.append(client.sha1(fp.name))
+        ret_val.append(client.sha1(fp.name))
     finally:
         rfs.close()
     return ret_val
