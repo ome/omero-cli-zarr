@@ -44,6 +44,7 @@ from zarr.errors import ArrayNotFoundError, GroupNotFoundError
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .import_labels import create_labels
 from .import_xml import full_import
 
 # TODO: support Zarr v3 - imports for get_omexml_bytes()
@@ -185,6 +186,9 @@ def create_image(
 
     img_obj = image._obj
     set_external_info(img_obj, kwargs, image_path)
+    if "labels" in kwargs and kwargs["labels"]:
+        print("Importing labels for image:", img_obj.id.val)
+        create_labels(conn, store, img_obj.id.val, image_path)
 
     return img_obj, rnd_def
 
@@ -636,7 +640,8 @@ def register_zarr(
     validate_endpoint(endpoint)
     store = None
     if uri.startswith("/"):
-        store = zarr.storage.LocalStore(uri, read_only=True)
+        # store = zarr.storage.LocalStore(uri, read_only=True)
+        store = zarr.storage.NestedDirectoryStore(uri)
     else:
         storage_options: Dict[str, Any] = {}
         if nosignrequest:
@@ -684,6 +689,9 @@ def register_zarr(
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
                     set_external_info(image._obj, kwargs, image_path=image_path)
+                    if "labels" in kwargs and kwargs["labels"]:
+                        print("Importing labels for series:", series)
+                        create_labels(conn, store, image.id, kwargs["labels"])
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
                     print("Imported Image:", image.id)
