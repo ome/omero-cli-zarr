@@ -41,7 +41,7 @@ from .raw_pixels import (
     image_to_zarr,
     plate_to_zarr,
 )
-from .register import register_zarr
+from .zarr_import import import_zarr
 
 HELP = """Export data in zarr format.
 
@@ -51,7 +51,7 @@ Subcommands
  - export
  - masks
  - polygons
- - register
+ - import
 
 """
 EXPORT_HELP = """Export an image in zarr format.
@@ -111,7 +111,7 @@ Options
 
 POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
 
-REGISTER_HELP = """Create a new Image in OMERO from a zarr file.
+IMPORT_HELP = """Create a new Image or Plate in OMERO from an OME-Zarr URL.
 
 This requires omero-zarr-pixel-buffer to be installed on the server.
 """
@@ -334,17 +334,21 @@ class ZarrControl(BaseControl):
                 " max value for the dtype",
             )
 
-        # Register
-        register = parser.add(sub, self.register, REGISTER_HELP)
-        register.add_argument("uri")
-        register.add_argument(
+        # Import subcommand
+        # we need to call add_parser directly use "import" as the command
+        # instead of the import_cmd function name
+        import_cmd = sub.add_parser("import", help=IMPORT_HELP)
+        import_cmd.set_defaults(func=self.import_cmd)
+
+        import_cmd.add_argument("uri")
+        import_cmd.add_argument(
             "--endpoint", type=str, help="Enter the URL endpoint if applicable"
         )
-        register.add_argument("--name", type=str, help="The name of the image/plate")
-        register.add_argument(
+        import_cmd.add_argument("--name", type=str, help="The name of the image/plate")
+        import_cmd.add_argument(
             "--nosignrequest", action="store_true", help="Indicate to sign anonymously"
         )
-        register.add_argument(
+        import_cmd.add_argument(
             "--target",
             type=str,
             help=(
@@ -352,10 +356,10 @@ class ZarrControl(BaseControl):
                 "or Dataset:<id> or Screen:<id>"
             ),
         )
-        register.add_argument(
+        import_cmd.add_argument(
             "--target-by-name", type=str, help="The name of the target (dataset/screen)"
         )
-        register.add_argument(
+        import_cmd.add_argument(
             "--wait",
             type=int,
             default=-1,
@@ -365,7 +369,7 @@ class ZarrControl(BaseControl):
                 "Only applies when importing OME/METADATA.ome.xml."
             ),
         )
-        register.add_argument(
+        import_cmd.add_argument(
             "--labels", action="store_true", help="Also import labels if present"
         )
 
@@ -406,10 +410,9 @@ class ZarrControl(BaseControl):
             plate_to_zarr(plate, args)
 
     @gateway_required
-    def register(self, args: argparse.Namespace) -> None:
-        """Register a zarr file as an Image in OMERO."""
-        print("Registering zarr file as an Image in OMERO", args.uri)
-        register_zarr(
+    def import_cmd(self, args: argparse.Namespace) -> None:
+        """Import a zarr file as an Image in OMERO."""
+        import_zarr(
             self.gateway,
             uri=args.uri,
             endpoint=args.endpoint,

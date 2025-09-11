@@ -337,7 +337,7 @@ def load_models(conn: BlitzGateway) -> list:
     )
 
 
-def register_image(
+def import_image(
     conn: BlitzGateway,
     store: zarr.storage.Store,
     kwargs: dict,
@@ -345,7 +345,7 @@ def register_image(
     image_path: Optional[str] = None,
 ) -> tuple:
     """
-    Register the ome.zarr image in OMERO.
+    Create the ome.zarr image in OMERO.
     """
 
     update_service = conn.getUpdateService()
@@ -409,11 +409,11 @@ def create_plate_acquisition(pa: dict) -> omero.model.PlateAcquisitionI:
     return plate_acquisition
 
 
-def register_plate(
+def import_plate(
     conn: BlitzGateway, store: zarr.storage.Store, attrs: dict, kwargs: dict
 ) -> omero.model.PlateI:
     """
-    Register a plate
+    Create a plate in OMERO
     """
 
     plate_attrs = attrs["plate"]
@@ -625,7 +625,7 @@ def link_to_target(
         print("Linked to Dataset", target.getId())
 
 
-def register_zarr(
+def import_zarr(
     conn: BlitzGateway, uri: str, **kwargs: Any
 ) -> List[Union[omero.model.PlateI, omero.model.ImageI]]:
     # All connection params are in kwargs so they can be easily
@@ -660,11 +660,11 @@ def register_zarr(
     zattrs = load_attrs(store)
     objs = []
     if "plate" in zattrs:
-        print("Registering: Plate")
-        objs = [register_plate(conn, store, zattrs, kwargs)]
+        print("Importing: Plate")
+        objs = [import_plate(conn, store, zattrs, kwargs)]
     else:
         if zattrs.get("bioformats2raw.layout") == 3:
-            print("Registering: bioformats2raw.layout")
+            print("Importing: bioformats2raw.layout")
             zarr_name = kwargs.get("uri", "").rstrip("/").split("/")[-1]
             if kwargs.get("name"):
                 zarr_name = kwargs.get("name")
@@ -705,7 +705,7 @@ def register_zarr(
                 while series_exists:
                     try:
                         print("Checking for series:", series)
-                        obj = register_image(
+                        obj = import_image(
                             conn, store, kwargs, None, image_path=str(series)
                         )
                         objs.append(obj)
@@ -715,8 +715,8 @@ def register_zarr(
                         series_exists = False
                     series += 1
         else:
-            print("Registering: Image")
-            objs = [register_image(conn, store, kwargs, zattrs)]
+            print("Importing: Image")
+            objs = [import_image(conn, store, kwargs, zattrs)]
 
     if kwargs.get("target") or kwargs.get("target_by_name"):
         for obj in objs:

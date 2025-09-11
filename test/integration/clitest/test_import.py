@@ -26,12 +26,12 @@ from omero.gateway import BlitzGateway
 from omero.model import MaskI
 from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
-from omero_zarr.register import register_zarr
+from omero_zarr.zarr_import import import_zarr
 
 SAMPLES: Dict[str, Dict[str, Any]] = {
     "6001240.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
-        "dataset_name": "Test Register 6001240",
+        "dataset_name": "Test Import 6001240",
         "args": "--labels",
     },
     "13457227.zarr": {
@@ -61,7 +61,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
         ),
         "pixel_sizes_x": [0.23, 0.45, 0.91],
         "series_count": 3,
-        "dataset_name": "Test Register LacZ_ctrl.zarr",
+        "dataset_name": "Test Import LacZ_ctrl.zarr",
     },
     "9846151.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0048A/9846151.zarr/",
@@ -69,7 +69,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
 }
 
 
-class TestRegister(AbstractCLITest):
+class TestImport(AbstractCLITest):
 
     def setup_method(self, method: str) -> None:
         """Set up the test."""
@@ -77,7 +77,7 @@ class TestRegister(AbstractCLITest):
         self.cli.register("zarr", ZarrControl, "TEST")
         self.args += ["zarr"]
 
-    # register tests
+    # import tests
     # ========================================================================
 
     @pytest.mark.parametrize("sample_id", SAMPLES.keys())
@@ -97,7 +97,7 @@ class TestRegister(AbstractCLITest):
 
         if invoke == "cli":
             exp_args = [
-                "register",
+                "import",
                 sample["url"],
             ]
             if "args" in sample:
@@ -140,7 +140,7 @@ class TestRegister(AbstractCLITest):
                 # If no dataset name, we use the ID of the dataset we created
                 kwargs["target"] = str(dataset.getId().val)
 
-            objs = register_zarr(conn, sample["url"], **kwargs)
+            objs = import_zarr(conn, sample["url"], **kwargs)
             image_ids = [obj.id.val for obj in objs]
 
         # check we have created the expected number of images
