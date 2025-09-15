@@ -691,7 +691,7 @@ def import_zarr(
                     set_external_info(image._obj, kwargs, image_path=image_path)
                     if "labels" in kwargs and kwargs["labels"]:
                         print("Importing labels for series:", series)
-                        create_labels(conn, store, image.id, kwargs["labels"])
+                        create_labels(conn, store, image.id, image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
                     print("Imported Image:", image.id)

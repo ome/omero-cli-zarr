@@ -23,6 +23,7 @@ from omero.gateway import BlitzGateway, ColorHolder
 from omero.model import ImageI, MaskI, RoiI
 from omero.rtypes import rdouble, rint, rstring
 from zarr.creation import open_array
+from zarr.errors import GroupNotFoundError
 from zarr.hierarchy import open_group
 from zarr.storage import Store, StoreLike
 
@@ -62,7 +63,6 @@ def masks_from_labels_nd(
     # For each label value, we create an ROI that
     # contains 2D masks for each time point, channel, and z-slice.
     for i in range(1, int(labels_nd.max()) + 1):
-        print("Mask value", i)
         if not np.any(labels_nd == i):
             continue
 
@@ -77,7 +77,6 @@ def masks_from_labels_nd(
         for t in range(size_t):
             for c in range(size_c):
                 for z in range(size_z):
-                    print("t, c, z", t, c, z)
 
                     indices = []
                     if "t" in axes:
@@ -101,13 +100,11 @@ def masks_from_labels_nd(
                     # Find bounding box to minimise size of mask
                     xmask = plane.sum(0).nonzero()[0]
                     ymask = plane.sum(1).nonzero()[0]
-                    print("xmask", xmask, "ymask", ymask)
                     # if any(xmask) and any(ymask):
                     x0 = min(xmask)
                     w = max(xmask) - x0 + 1
                     y0 = min(ymask)
                     h = max(ymask) - y0 + 1
-                    print("cropping to x, y, w, h", x0, y0, w, h)
                     submask = plane[y0 : (y0 + h), x0 : (x0 + w)]
 
                     mask = MaskI()
@@ -171,7 +168,11 @@ def create_labels(
     if image_path is None:
         image_path = ""
     labels_path = image_path + "/labels"
-    labels_attrs = load_attrs(store, labels_path)
+    try:
+        labels_attrs = load_attrs(store, labels_path)
+    except GroupNotFoundError:
+        print("No zarr group at", labels_path)
+        return
     if "labels" not in labels_attrs:
         print("No labels found at", labels_path)
         return
@@ -190,9 +191,6 @@ def create_labels(
         array_path = f"{label_path}/{ds_path}/"
         labels_nd = open_array(store=store, mode="r", path=array_path)
         labels_data = labels_nd[slice(None)]
-        print("labels_nd", labels_nd)
-        print("labels_data", labels_data)
-        print("axes_names", axes_names)
 
         # Create ROIs from the labels
         rois_from_labels_nd(conn, image_id, labels_data, axes_names, label_props)
