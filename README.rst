@@ -9,12 +9,20 @@ OMERO CLI Zarr plugin
 
 This OMERO command-line plugin allows you to export Images and Plates
 from OMERO as zarr files, according to the spec at
-https://github.com/ome/omero-ms-zarr/blob/master/spec.md
+https://ngff.openmicroscopy.org/0.4/index.html
 as well as Masks associated with Images.
 
-Images are nD arrays of shape, up to `(t, c, z, y, x)`.
+It also supports "import" of public OME-Zarr files into OMERO.
+The data itself remains external to OMERO and is accessed via
+the `omero-zarr-pixel-buffer <https://github.com/glencoesoftware/omero-zarr-pixel-buffer>`_,
+which must be installed on the OMERO server.
+
+Export
+------
+
+Images are exported as nD arrays of shape, up to `(t, c, z, y, x)`.
 Plates are a hierarchy of `plate/row/column/field(image)`.
-Masks are 2D bitmasks which can exist on muliplte planes of an Image.
+Masks are 2D bitmasks which can exist on multiple planes of an Image.
 In `ome-zarr` sets of Masks are collected together into "labels".
 
 It supports export using 2 alternative methods:
@@ -30,8 +38,8 @@ It supports export using 2 alternative methods:
 Usage
 -------
 
-Images and Plates
-^^^^^^^^^^^^^^^^^
+Export Images and Plates
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 To export Images or Plates via the OMERO API::
 
@@ -63,8 +71,8 @@ To export images via bioformats2raw we use the ```--bf``` flag::
     $ omero zarr --output /home/user/zarr_files export 1 --bf
     Image exported to /home/user/zarr_files/2chZT.lsm
 
-Masks and Polygons
-^^^^^^^^^^^^^^^^^^
+Export Masks and Polygons
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons` command::
 
@@ -117,6 +125,16 @@ This creates a file `5514375.rois` like this::
 This will create zarr groups of `Cell` and `Chromosomes` under `5514375.zarr/labels/`::
 
     $ omero zarr masks Image:5514375 --label-map=5514375.rois
+
+Import OME-Zarr files
+^^^^^^^^^^^^^^^^^^^^^
+
+To import a public OME-Zarr file into OMERO, use the `import` command::
+
+    $ omero zarr import https://example.com/path/to/file.ome.zarr
+
+    # Use --target DATASET_ID to import into a Dataset
+    $ omero zarr import https://example.com/path/to/file.ome.zarr --target 1234
 
 License
 -------
