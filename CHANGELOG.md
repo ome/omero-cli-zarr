@@ -1,3 +1,7 @@
+# 0.7.0rc1 (September 2025)
+
+- Support for zarr import ([#180](https://github.com/ome/omero-cli-zarr/pull/180))
+
 # 0.6.1 (June 2024)
 
 - Fix version
