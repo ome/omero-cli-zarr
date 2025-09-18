@@ -369,6 +369,9 @@ class ZarrControl(BaseControl):
                 "Only applies when importing OME/METADATA.ome.xml."
             ),
         )
+        import_cmd.add_argument(
+            "--labels", action="store_true", help="Also import labels if present"
+        )
 
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:
@@ -418,6 +421,7 @@ class ZarrControl(BaseControl):
             target=args.target,
             target_by_name=args.target_by_name,
             wait=args.wait,
+            labels=args.labels,
         )
 
     def _lookup(

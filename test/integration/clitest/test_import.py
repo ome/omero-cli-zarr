@@ -23,6 +23,7 @@ from typing import Any, Dict
 
 import pytest
 from omero.gateway import BlitzGateway
+from omero.model import MaskI
 from omero.testlib.cli import AbstractCLITest
 from omero_zarr.cli import ZarrControl
 from omero_zarr.zarr_import import import_zarr
@@ -31,6 +32,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
     "6001240.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
         "dataset_name": "Test Import 6001240",
+        "args": "--labels",
     },
     "13457227.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457227.zarr",
@@ -130,6 +132,8 @@ class TestImport(AbstractCLITest):
                     kwargs["endpoint"] = url_args[1]
                 if "--nosignrequest" in url_args:
                     kwargs["nosignrequest"] = True
+                if "--labels" in url_args:
+                    kwargs["labels"] = True
             if "dataset_name" in sample:
                 kwargs["target_by_name"] = ds_name
             else:
@@ -164,3 +168,18 @@ class TestImport(AbstractCLITest):
                     f"Image {img_id} sizeX {size_x} physSizeX {phys_size_x} != "
                     f"expected {exp_size_x}"
                 )
+
+        if "labels" in sample.get("args", ""):
+            # check we have labels
+            for img_id in image_ids:
+                roi_service = conn.getRoiService()
+                result = roi_service.findByImage(img_id, None)
+                assert len(result.rois) > 0, f"No ROIs found for image {img_id}"
+                for roi in result.rois:
+                    assert (
+                        len(roi.copyShapes()) > 0
+                    ), f"No shapes found for ROI {roi.id.val}"
+                    for s in roi.copyShapes():
+                        assert type(s) is MaskI
+                        assert s.getWidth().getValue() > 0
+                        assert s.getHeight().getValue() > 0
