@@ -493,8 +493,7 @@ def import_zarr(
     validate_endpoint(endpoint)
     store = None
     if uri.startswith("/"):
-        # store = zarr.storage.LocalStore(uri, read_only=True)
-        store = zarr.storage.NestedDirectoryStore(uri)
+        store = zarr.storage.LocalStore(uri, read_only=True)
     else:
         storage_options: Dict[str, Any] = {}
         if nosignrequest:
@@ -508,7 +507,7 @@ def import_zarr(
         #         uri, read_only=True, storage_options=storage_options
         #     )
         # else:
-        store = LocalStore(uri, mode="r", **storage_options)
+        store = LocalStore(uri, read_only=True)
 
     zattrs = load_attrs(store)
     objs = []
