@@ -44,7 +44,6 @@ from zarr.api.synchronous import open_array, open_group
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import sync
 from zarr.errors import ArrayNotFoundError, GroupNotFoundError
-from zarr.storage import LocalStore
 
 from .import_xml import full_import
 
@@ -492,9 +491,10 @@ def import_zarr(
     nosignrequest = kwargs.get("nosignrequest", False)
     validate_endpoint(endpoint)
     store = None
-    if uri.startswith("/"):
-        store = zarr.storage.LocalStore(uri, read_only=True)
-    else:
+    args = {}
+
+    # Let zarr create the store based on the uri
+    if not uri.startswith("/"):
         storage_options: Dict[str, Any] = {}
         if nosignrequest:
             storage_options["anon"] = True
@@ -502,12 +502,10 @@ def import_zarr(
         if endpoint:
             storage_options["client_kwargs"] = {"endpoint_url": endpoint}
 
-        # if FsspecStore is not None:
-        #     store = FsspecStore.from_url(
-        #         uri, read_only=True, storage_options=storage_options
-        #     )
-        # else:
-        store = LocalStore(uri, read_only=True)
+        args["storage_options"] = storage_options
+
+    root_group = open_group(uri, mode="r", **args)
+    store = root_group.store
 
     zattrs = load_attrs(store)
     objs = []
