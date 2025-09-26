@@ -38,7 +38,7 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring
-from zarr import open_array, open_group
+from zarr.api.synchronous import open_array, open_group
 
 # TODO: support Zarr v3 - imports for get_omexml_bytes()
 from zarr.core.buffer import default_buffer_prototype
