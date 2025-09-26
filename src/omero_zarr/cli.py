@@ -41,6 +41,7 @@ from .raw_pixels import (
     image_to_zarr,
     plate_to_zarr,
 )
+from .zarr_import import import_zarr
 
 HELP = """Export data in zarr format.
 
@@ -49,6 +50,8 @@ Subcommands
 
  - export
  - masks
+ - polygons
+ - import
 
 """
 EXPORT_HELP = """Export an image in zarr format.
@@ -107,6 +110,11 @@ Options
 """
 
 POLYGONS_HELP = """Export ROI Polygons on the Image or Plate in zarr format"""
+
+IMPORT_HELP = """Create a new Image or Plate in OMERO from an OME-Zarr URL.
+
+This requires omero-zarr-pixel-buffer to be installed on the server.
+"""
 
 
 def gateway_required(func: Callable) -> Callable:
@@ -332,6 +340,42 @@ class ZarrControl(BaseControl):
                 " max value for the dtype",
             )
 
+        # Import subcommand
+        # we need to call add_parser directly use "import" as the command
+        # instead of the import_cmd function name
+        import_cmd = sub.add_parser("import", help=IMPORT_HELP)
+        import_cmd.set_defaults(func=self.import_cmd)
+
+        import_cmd.add_argument("uri")
+        import_cmd.add_argument(
+            "--endpoint", type=str, help="Enter the URL endpoint if applicable"
+        )
+        import_cmd.add_argument("--name", type=str, help="The name of the image/plate")
+        import_cmd.add_argument(
+            "--nosignrequest", action="store_true", help="Indicate to sign anonymously"
+        )
+        import_cmd.add_argument(
+            "--target",
+            type=str,
+            help=(
+                "The id of the target (dataset/screen), "
+                "or Dataset:<id> or Screen:<id>"
+            ),
+        )
+        import_cmd.add_argument(
+            "--target-by-name", type=str, help="The name of the target (dataset/screen)"
+        )
+        import_cmd.add_argument(
+            "--wait",
+            type=int,
+            default=-1,
+            help=(
+                "Wait for this number of seconds for each import to complete. "
+                "0: return immediately, -1: wait indefinitely (default). "
+                "Only applies when importing OME/METADATA.ome.xml."
+            ),
+        )
+
     @gateway_required
     def masks(self, args: argparse.Namespace) -> None:
         """Export masks on the Image as zarr files."""
@@ -373,6 +417,20 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+
+    @gateway_required
+    def import_cmd(self, args: argparse.Namespace) -> None:
+        """Import a zarr file as an Image in OMERO."""
+        import_zarr(
+            self.gateway,
+            uri=args.uri,
+            endpoint=args.endpoint,
+            nosignrequest=args.nosignrequest,
+            name=args.name,
+            target=args.target,
+            target_by_name=args.target_by_name,
+            wait=args.wait,
+        )
 
     def _lookup(
         self, gateway: BlitzGateway, otype: str, oid: int
