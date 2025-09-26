@@ -38,18 +38,15 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring
-from zarr.core import Array
-from zarr.creation import open_array
-from zarr.errors import ArrayNotFoundError, GroupNotFoundError
-from zarr.hierarchy import open_group
-from zarr.storage import FSStore
-
-from .import_xml import full_import
+from zarr import open_array, open_group
 
 # TODO: support Zarr v3 - imports for get_omexml_bytes()
-# from zarr.core.buffer import default_buffer_prototype
-# from zarr.core.sync import sync
+from zarr.core.buffer import default_buffer_prototype
+from zarr.core.sync import sync
+from zarr.errors import ArrayNotFoundError, GroupNotFoundError
+from zarr.storage import LocalStore
 
+from .import_xml import full_import
 
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
 
@@ -70,16 +67,13 @@ PIXELS_TYPE = {
 }
 
 
-def get_omexml_bytes(store: zarr.storage.Store) -> Optional[bytes]:
+def get_omexml_bytes(store: zarr.storage.StoreLike) -> Optional[bytes]:
     # Zarr v3 get() is async. Need to sync to get the bytes
-    # rsp = store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype())
-    # result = sync(rsp)
-    # if result is None:
-    #     return None
-    # return result.to_bytes()
-
-    # Zarr v2
-    return store.get("OME/METADATA.ome.xml")
+    rsp = store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype())
+    result = sync(rsp)
+    if result is None:
+        return None
+    return result.to_bytes()
 
 
 def format_s3_uri(uri: str, endpoint: str) -> str:
@@ -96,10 +90,6 @@ def format_s3_uri(uri: str, endpoint: str) -> str:
     return f"{parsed_uri.scheme}" + "://" + endpoint + "/" + url + f"{parsed_uri.path}"
 
 
-def load_array(store: zarr.storage.Store, path: Optional[str] = None) -> Array:
-    return open_array(store=store, mode="r", path=path)
-
-
 def load_attrs(store: zarr.storage.StoreLike, path: Optional[str] = None) -> dict:
     """
     Load the attrs from the root group or path subgroup
@@ -112,7 +102,7 @@ def load_attrs(store: zarr.storage.StoreLike, path: Optional[str] = None) -> dic
 
 
 def parse_image_metadata(
-    store: zarr.storage.Store, img_attrs: dict, image_path: Optional[str] = None
+    store: zarr.storage.StoreLike, img_attrs: dict, image_path: Optional[str] = None
 ) -> tuple:
     """
     Parse the image metadata
@@ -122,7 +112,7 @@ def parse_image_metadata(
     if image_path is not None:
         array_path = image_path.rstrip("/") + "/" + array_path
     # load .zarray from path to know the dimension
-    array_data = load_array(store, array_path)
+    array_data = open_array(store=store, mode="r", path=array_path)
     sizes = {}
     shape = array_data.shape
     axes = multiscale_attrs.get("axes")
@@ -140,7 +130,7 @@ def parse_image_metadata(
 
 def create_image(
     conn: BlitzGateway,
-    store: zarr.storage.Store,
+    store: zarr.storage.StoreLike,
     image_attrs: dict,
     object_name: str,
     families: list,
@@ -335,7 +325,7 @@ def load_models(conn: BlitzGateway) -> list:
 
 def import_image(
     conn: BlitzGateway,
-    store: zarr.storage.Store,
+    store: zarr.storage.StoreLike,
     kwargs: dict,
     img_attrs: Optional[dict] = None,
     image_path: Optional[str] = None,
@@ -518,7 +508,7 @@ def import_zarr(
         #         uri, read_only=True, storage_options=storage_options
         #     )
         # else:
-        store = FSStore(uri, mode="r", **storage_options)
+        store = LocalStore(uri, mode="r", **storage_options)
 
     zattrs = load_attrs(store)
     objs = []
