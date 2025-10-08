@@ -179,10 +179,7 @@ def set_external_info(
 
     img_path = _get_path(conn, img.id)
     if overwrite_path:
-        if not overwrite_path.endswith("/"):
-            path = f"{overwrite_path}/"
-        else:
-            path = overwrite_path
+        path = overwrite_path
     else:
         if METADATA_XML_RE.match(img_path):
             metadata_xml = METADATA_XML_RE.match(img_path).group(1)
@@ -201,7 +198,8 @@ def set_external_info(
             raise ValueError(f"Couldn't parse well position: {well}")
     else:
         series = img.getSeries()._val
-        path = f"{path}{series}"
+        if not overwrite_path:
+            path = f"{path}{series}"
 
     info = ExternalInfoI()
     info.entityType = rstring(entityType)
