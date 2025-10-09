@@ -95,6 +95,20 @@ To export Images or Plates via the OMERO API::
     # By default, a tile (chunk) size of 1024 is used. Specify values with
     $ omero zarr export Image:1 --tile_width 256 --tile_height 256
 
+    # To exclude Wells from a Plate export, based on Key-Value pairs
+    # (map annotations) use --skip_wells_map key:value. Supports wildcards.
+    $ omero zarr export Plate:1 --skip_wells_map my_key:my_value
+    $ omero zarr export Plate:1 --skip_wells_map my_key:my*
+    $ omero zarr export Plate:1 --skip_wells_map my_key:*value
+    $ omero zarr export Plate:1 --skip_wells_map my_key:*val*
+    $ omero zarr export Plate:1 --skip_wells_map my_key:*
+
+    # Use --metadata_only to export only metadata, no pixel data
+    $ omero zarr export Image:1 --metadata_only
+    $ omero zarr export Plate:2 --metadata_only
+
+    # To export Key-Value pairs from Wells in a Plate as a CSV file,
+    $ omero zarr export_csv Plate:1 --skip_wells_map my_key:*
 
 NB: If the connection to OMERO is lost and the Image is partially exported,
 re-running the command will attempt to complete the export.

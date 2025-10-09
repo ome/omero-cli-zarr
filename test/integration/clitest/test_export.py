@@ -24,7 +24,7 @@ from typing import List
 
 import dask.array as da
 import pytest
-from omero.gateway import BlitzGateway, PlateWrapper
+from omero.gateway import BlitzGateway, MapAnnotationWrapper, PlateWrapper
 from omero.model import ImageI, PolygonI, RoiI
 from omero.rtypes import rint, rstring
 from omero.testlib.cli import AbstractCLITest
@@ -39,6 +39,25 @@ class TestRender(AbstractCLITest):
         self.args = self.login_args()
         self.cli.register("zarr", ZarrControl, "TEST")
         self.args += ["zarr"]
+        self.plate = self.create_plate()
+
+    def create_plate(self) -> PlateWrapper:
+        plates = self.import_plates(
+            client=self.client,
+            plates=1,
+            plate_acqs=1,
+            plate_cols=2,
+            plate_rows=2,
+            fields=1,
+        )
+        plate_id = plates[0].id.val
+        print("Plate Created ID:", plate_id)
+
+        conn = BlitzGateway(client_obj=self.client)
+        plate = conn.getObject("Plate", plate_id)
+        self.add_polygons_to_plate(plate)
+        self.add_kvps_to_wells(plate)
+        return plate
 
     def add_shape_to_image(self, shape: PolygonI, image: ImageI) -> None:
         roi = RoiI()
@@ -79,13 +98,52 @@ class TestRender(AbstractCLITest):
                     y = 100 + (i * 5)
                     # Rectangles don't overlap
                     self.add_polygon_to_image(image, xywh=[x, y, 40, 40], z=0, t=0)
+                # for "B1", add overlapping polygon
+                if wellPos == "B1":
+                    # Add an overlapping polygon to the image in B1
+                    self.add_polygon_to_image(image, xywh=[20, 100, 40, 40], z=0, t=0)
+
+    def add_kvps_to_wells(self, plate: PlateWrapper) -> None:
+        """Add key-value pairs of "label:A1" to each well in the plate."""
+        for well in plate.listChildren():
+            wellPos = well.getWellPos()
+            map_ann = MapAnnotationWrapper()
+            vals = [["label", wellPos]]
+            if "A" in wellPos:
+                vals.append(["rowA", "True"])
+            map_ann.setValue(vals)
+            well.linkAnnotation(map_ann)
+
+    def check_well(self, well_path: Path, label_count: int) -> None:
+        label_text = (well_path / "0" / "labels" / "0" / ".zattrs").read_text(
+            encoding="utf-8"
+        )
+        label_image_json = json.loads(label_text)
+        assert "multiscales" in label_image_json
+        assert "image-label" in label_image_json
+        datasets = label_image_json["multiscales"][0]["datasets"]
+        for dataset in datasets:
+            label_path = dataset["path"]
+            print("label_path", well_path / "0" / "labels" / "0" / label_path)
+            arr_data = da.from_zarr(well_path / "0" / "labels" / "0" / label_path)
+            print("arr_data", arr_data)
+            if label_path == "0":
+                assert arr_data.shape == (512, 512)
+            max_value = arr_data.max().compute()
+            print("max_value", max_value)
+            assert max_value == label_count
 
     # export tests
     # ========================================================================
 
+    @pytest.mark.parametrize("metadata_only", [False, True])
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_zarr(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        metadata_only: bool,
     ) -> None:
         """Test export of a Zarr image."""
         sizec = 2
@@ -99,6 +157,8 @@ class TestRender(AbstractCLITest):
             "--name_by",
             name_by,
         ]
+        if metadata_only:
+            exp_args.append("--metadata_only")
         self.cli.invoke(
             self.args + exp_args,
             strict=True,
@@ -131,20 +191,21 @@ class TestRender(AbstractCLITest):
         arr_json = json.loads(arr_text)
         assert arr_json["shape"] == [sizec, 512, 512]
 
+        arr_data = da.from_zarr(tmp_path / zarr_name / "0")
+        max_value = arr_data.max().compute()
+        assert metadata_only == (max_value == 0)
+
+    @pytest.mark.parametrize("metadata_only", [False, True])
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_plate(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        metadata_only: bool,
     ) -> None:
 
-        plates = self.import_plates(
-            client=self.client,
-            plates=1,
-            plate_acqs=1,
-            plate_cols=2,
-            plate_rows=2,
-            fields=1,
-        )
-        plate_id = plates[0].id.val
+        plate_id = self.plate.id
         exp_args = [
             "export",
             f"Plate:{plate_id}",
@@ -153,12 +214,13 @@ class TestRender(AbstractCLITest):
             "--name_by",
             name_by,
         ]
+        if metadata_only:
+            exp_args.append("--metadata_only")
         self.cli.invoke(
             self.args + exp_args,
             strict=True,
         )
-        plate = self.query.get("Plate", plate_id)
-        plate_name = plate.name.val
+        plate_name = self.plate.name
         zarr_name = (
             f"{plate_name}.ome.zarr" if name_by == "name" else f"{plate_id}.ome.zarr"
         )
@@ -176,12 +238,12 @@ class TestRender(AbstractCLITest):
         assert len(attrs_json["plate"]["wells"]) == 4
         assert attrs_json["plate"]["rows"] == [{"name": "A"}, {"name": "B"}]
         assert attrs_json["plate"]["columns"] == [{"name": "1"}, {"name": "2"}]
-
-        arr_text = (tmp_path / zarr_name / "A" / "1" / "0" / "0" / ".zarray").read_text(
-            encoding="utf-8"
-        )
-        arr_json = json.loads(arr_text)
-        assert arr_json["shape"] == [512, 512]
+        # check first well A1
+        arr_data = da.from_zarr(tmp_path / zarr_name / "A" / "1" / "0" / "0")
+        assert arr_data.shape == (512, 512)
+        print("arr_data", arr_data)
+        max_value = arr_data.max().compute()
+        assert metadata_only == (max_value == 0)
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
     def test_export_masks(
@@ -192,20 +254,21 @@ class TestRender(AbstractCLITest):
         img_id = images[0].id.val
         size_xy = 512
 
-        # Create a mask
+        # Create a mask for each channel
         from skimage.data import binary_blobs
 
-        blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
-            "int8"
-        )
         red = [255, 0, 0, 255]
-        mask = mask_from_binary_image(blobs, rgba=red, z=0, c=0, t=0)
-
-        roi = RoiI()
-        roi.setImage(images[0])
-        roi.addShape(mask)
-        updateService = self.client.sf.getUpdateService()
-        updateService.saveAndReturnObject(roi)
+        green = [0, 255, 0, 255]
+        for ch, color in enumerate([red, green]):
+            blobs = binary_blobs(length=size_xy, volume_fraction=0.1, n_dim=2).astype(
+                "int8"
+            )
+            mask = mask_from_binary_image(blobs, rgba=color, z=0, c=ch, t=0)
+            roi = RoiI()
+            roi.setImage(images[0])
+            roi.addShape(mask)
+            updateService = self.client.sf.getUpdateService()
+            updateService.saveAndReturnObject(roi)
 
         print("tmp_path", tmp_path)
 
@@ -232,39 +295,43 @@ class TestRender(AbstractCLITest):
         all_lines = ", ".join(lines)
         assert "Exporting to" in all_lines
         assert "Finished" in all_lines
-        assert "Found 1 mask shapes in 1 ROIs" in all_lines
+        assert "Found 2 mask shapes in 2 ROIs" in all_lines
 
         labels_text = (tmp_path / zarr_name / "labels" / "0" / ".zattrs").read_text(
             encoding="utf-8"
         )
         labels_json = json.loads(labels_text)
-        assert labels_json["image-label"]["colors"] == [{"label-value": 1, "rgba": red}]
+        assert labels_json["image-label"]["colors"] == [
+            {"label-value": 1, "rgba": red},
+            {"label-value": 2, "rgba": green},
+        ]
 
         arr_text = (tmp_path / zarr_name / "labels" / "0" / "0" / ".zarray").read_text(
             encoding="utf-8"
         )
         arr_json = json.loads(arr_text)
-        assert arr_json["shape"] == [1, 512, 512]
+        assert arr_json["shape"] == [2, 512, 512]
+
+    SKIP_WELLS_MAPS = {
+        "": ["A1", "A2", "B1", "B2"],
+        "label:B*": ["A1", "A2"],
+        "label:A1": ["A2", "B1", "B2"],
+        "label:*2": ["A1", "B1"],
+        "rowA:*": ["B1", "B2"],
+    }
 
     @pytest.mark.parametrize("name_by", ["id", "name"])
+    @pytest.mark.parametrize("skip_wells_map", SKIP_WELLS_MAPS.keys())
     def test_export_plate_polygons(
-        self, capsys: pytest.CaptureFixture, tmp_path: Path, name_by: str
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+        name_by: str,
+        skip_wells_map: str,
     ) -> None:
 
-        plates = self.import_plates(
-            client=self.client,
-            plates=1,
-            plate_acqs=1,
-            plate_cols=2,
-            plate_rows=2,
-            fields=1,
-        )
-        plate_id = plates[0].id.val
-
-        conn = BlitzGateway(client_obj=self.client)
-        plate = conn.getObject("Plate", plate_id)
-        self.add_polygons_to_plate(plate)
-
+        plate = self.plate
+        plate_id = plate.id
         print("Plate ID:", plate_id)
         extra_args = [
             f"Plate:{plate_id}",
@@ -272,14 +339,18 @@ class TestRender(AbstractCLITest):
             str(tmp_path),
             "--name_by",
             name_by,
+            "--skip_wells_map",
+            skip_wells_map,
         ]
         self.cli.invoke(
             self.args + ["export"] + extra_args,
             strict=True,
         )
 
+        # Don't fail on "B1" due to overlapping polygons
+        overlap_args = ["--overlaps", "dtype_max"]
         self.cli.invoke(
-            self.args + ["polygons"] + extra_args,
+            self.args + ["polygons"] + extra_args + overlap_args,
             strict=True,
         )
 
@@ -287,27 +358,67 @@ class TestRender(AbstractCLITest):
             f"{plate.name}.ome.zarr" if name_by == "name" else f"{plate_id}.ome.zarr"
         )
 
+        plate_text = (tmp_path / zarr_name / ".zattrs").read_text(encoding="utf-8")
+        plate_json = json.loads(plate_text)
+        assert "plate" in plate_json
+        well_labels = [
+            well["path"].replace("/", "") for well in plate_json["plate"]["wells"]
+        ]
+        assert well_labels == self.SKIP_WELLS_MAPS[skip_wells_map]
+
         print("tmp_path", tmp_path)
 
-        def check_well(well_path: Path, label_count: int) -> None:
-            label_text = (well_path / "0" / "labels" / "0" / ".zattrs").read_text(
-                encoding="utf-8"
-            )
-            label_image_json = json.loads(label_text)
-            assert "multiscales" in label_image_json
-            assert "image-label" in label_image_json
-            datasets = label_image_json["multiscales"][0]["datasets"]
-            for dataset in datasets:
-                label_path = dataset["path"]
-                print("label_path", well_path / "0" / "labels" / "0" / label_path)
-                arr_data = da.from_zarr(well_path / "0" / "labels" / "0" / label_path)
-                print("arr_data", arr_data)
-                if label_path == "0":
-                    assert arr_data.shape == (512, 512)
-                max_value = arr_data.max().compute()
-                print("max_value", max_value)
-                assert max_value == label_count
-
         # expect 1 label in A1, 4 labels in B2
-        check_well(tmp_path / zarr_name / "A" / "1", 1)
-        check_well(tmp_path / zarr_name / "B" / "2", 4)
+        if "A1" in self.SKIP_WELLS_MAPS[skip_wells_map]:
+            self.check_well(tmp_path / zarr_name / "A" / "1", 1)
+        if "B2" in self.SKIP_WELLS_MAPS[skip_wells_map]:
+            self.check_well(tmp_path / zarr_name / "B" / "2", 4)
+        # overlapping polygons in B1 - dtype max
+        if "B1" in self.SKIP_WELLS_MAPS[skip_wells_map]:
+            self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+
+    def test_plate_polygons_overlap(
+        self,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+    ) -> None:
+
+        plate = self.plate
+        plate_id = plate.id
+        print("Plate ID:", plate_id)
+
+        extra_args = [f"Plate:{plate_id}", "--output", str(tmp_path)]
+
+        self.cli.invoke(
+            self.args + ["export"] + extra_args,
+            strict=True,
+        )
+
+        # This should fail on "B1" due to overlapping polygons
+        with pytest.raises(Exception) as exc_info:
+            self.cli.invoke(
+                self.args + ["polygons"] + extra_args,
+                strict=True,
+            )
+        assert "overlaps with existing labels" in str(exc_info.value)
+
+        zarr_name = f"{plate_id}.ome.zarr"
+
+        # First Wells labels should be exported OK...
+        self.check_well(tmp_path / zarr_name / "A" / "1", 1)
+        self.check_well(tmp_path / zarr_name / "A" / "2", 2)
+        # Wells B3 and B4 - no labels
+        with pytest.raises(FileNotFoundError):
+            self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+        with pytest.raises(FileNotFoundError):
+            self.check_well(tmp_path / zarr_name / "B" / "2", 4)
+
+        # Test that we can pick-up labels export where we left off
+        overlap_args = ["--overlaps", "dtype_max"]
+        self.cli.invoke(
+            self.args + ["polygons"] + extra_args + overlap_args,
+            strict=True,
+        )
+
+        self.check_well(tmp_path / zarr_name / "B" / "1", 127)
+        self.check_well(tmp_path / zarr_name / "B" / "2", 4)
