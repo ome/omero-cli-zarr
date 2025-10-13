@@ -53,7 +53,7 @@ setup(
     python_requires=">=3",
     install_requires=[
         "omero-py>=5.6.0",
-        "ome-zarr",
+        "ome-zarr>=0.12.0",
     ],
     long_description=long_description,
     keywords=["OMERO.CLI", "plugin"],
