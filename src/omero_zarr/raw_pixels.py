@@ -28,7 +28,7 @@ import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from numcodecs import Blosc
 from ome_zarr.dask_utils import resize as da_resize
-from ome_zarr.format import CurrentFormat, format_from_version
+from ome_zarr.format import CurrentFormat, FormatV05, format_from_version
 from ome_zarr.io import parse_url
 from ome_zarr.writer import (
     add_metadata,
@@ -103,7 +103,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, fmt=datasets, axes=axes)
+    write_multiscales_metadata(parent, fmt=FormatV05(), datasets=datasets, axes=axes)
 
     return (level_count, axes)
 
