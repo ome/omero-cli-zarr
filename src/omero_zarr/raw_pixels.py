@@ -103,7 +103,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, datasets, axes=axes)
+    write_multiscales_metadata(parent, fmt=datasets, axes=axes)
 
     return (level_count, axes)
 
