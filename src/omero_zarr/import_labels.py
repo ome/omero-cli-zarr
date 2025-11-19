@@ -167,7 +167,7 @@ def create_labels(
     """
     if image_path is None:
         image_path = ""
-    labels_path = image_path + "/labels"
+    labels_path = image_path.rstrip("/") + "/labels"
     try:
         labels_attrs = load_attrs(store, labels_path)
     except GroupNotFoundError:
