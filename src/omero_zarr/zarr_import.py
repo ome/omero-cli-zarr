@@ -493,7 +493,7 @@ def import_plate(
             if "acquisition" in sample_attrs:
                 acquisition_id = sample_attrs["acquisition"]
                 pa_id = plate_acquisitions.get(acquisition_id)
-                if pa is not None:
+                if pa_id is not None:
                     ws.plateAcquisition = omero.model.PlateAcquisitionI(pa_id, False)
             ws.image = omero.model.ImageI(image.id.val, False)
             ws.well = well
