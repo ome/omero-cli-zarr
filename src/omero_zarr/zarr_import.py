@@ -467,8 +467,9 @@ def link_to_target(
         if len(objs) == 0:
             print("Target not found")
             return
-        # If multiple targets match by name, use the first one
-        target = objs[0]
+        # If multiple targets match by name, use the last one (most recently created)
+        objs.sort(key=lambda x: x.getId())
+        target = objs[-1]
 
     if target is None:
         print("Target not found")
