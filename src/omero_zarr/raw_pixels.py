@@ -28,7 +28,7 @@ import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
 from numcodecs import Blosc
 from ome_zarr.dask_utils import resize as da_resize
-from ome_zarr.format import CurrentFormat, FormatV05, format_from_version
+from ome_zarr.format import CurrentFormat, Format, format_from_version
 from ome_zarr.io import parse_url
 from ome_zarr.writer import (
     add_metadata,
@@ -65,9 +65,9 @@ def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -
     else:
         fmt = CurrentFormat()
     print(f"Exporting to {name} ({fmt.version})")
-    store = parse_url(name, mode="w", fmt=fmt).store
-    root = open_group(store)
-    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
+    # store = parse_url(name, mode="w", fmt=fmt).store
+    root = open_group(name, mode="a", zarr_format=fmt.zarr_format)
+    add_image(image, root, tile_width=tile_width, tile_height=tile_height, fmt=fmt)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -78,6 +78,7 @@ def add_image(
     parent: Group,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    fmt: Optional[Format] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Returns the number of resolution levels generated for the image.
@@ -103,7 +104,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, fmt=FormatV05(), datasets=datasets, axes=axes)
+    write_multiscales_metadata(parent, fmt=fmt, datasets=datasets, axes=axes)
 
     return (level_count, axes)
 
