@@ -217,6 +217,7 @@ def create_image(
     )
 
     img_obj = image._obj
+    set_pixel_size(image, pixel_size)
 
     set_external_info(img_obj, kwargs, image_path)
 
@@ -578,7 +579,7 @@ def import_zarr(
                     image_path = str(series)
                     image_attrs = load_attrs(store, image_path)
                     # pixels_type is only used if we have *incomplete* `omero` metadata
-                    sizes, pixels_type = parse_image_metadata(
+                    sizes, pixels_type, pixel_size = parse_image_metadata(
                         store, image_attrs, image_path
                     )
                     rnd_def = set_rendering_settings(
@@ -586,6 +587,7 @@ def import_zarr(
                     )
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
+                    set_pixel_size(image._obj, pixel_size)
                     set_external_info(image._obj, kwargs, image_path=image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
