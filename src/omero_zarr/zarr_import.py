@@ -147,16 +147,16 @@ def parse_image_metadata(
     pixels_type = array_data.dtype.name
     return sizes, pixels_type, pixel_size
 
-def create_length(value_unit):
+def create_length(value_unit: Array) -> omero.model.LengthI:
     if len(value_unit) > 1 and value_unit[1]:
         try:
             return LengthI(value_unit[0], value_unit[1].upper())
-        except:
+        except TypeError:
             pass
     return LengthI(value_unit[0])
 
 
-def set_pixel_size(image, pixel_size):
+def set_pixel_size(image: ImageWrapper, pixel_size: dict) -> None:
     pixels = image.getPrimaryPixels()._obj
     if "x" in pixel_size:
         pixels.setPhysicalSizeX(create_length(pixel_size["x"]))
