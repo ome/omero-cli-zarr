@@ -25,8 +25,7 @@ import omero
 import zarr
 from numpy import finfo, iinfo
 from omero.gateway import BlitzGateway, ImageWrapper
-from omero.model import ExternalInfoI
-from omero.model import LengthI
+from omero.model import ExternalInfoI, LengthI
 from omero.model.enums import (
     PixelsTypecomplex,
     PixelsTypedouble,
