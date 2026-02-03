@@ -26,6 +26,7 @@ import zarr
 from numpy import finfo, iinfo
 from omero.gateway import BlitzGateway, ImageWrapper
 from omero.model import ExternalInfoI
+from omero.model import LengthI
 from omero.model.enums import (
     PixelsTypecomplex,
     PixelsTypedouble,
@@ -134,9 +135,35 @@ def parse_image_metadata(
             else:
                 sizes[axis["name"]] = size
 
-    pixels_type = array_data.dtype.name
-    return sizes, pixels_type
+    pixel_size = {}
+    transforms = multiscale_attrs["datasets"][0]["coordinateTransformations"]
+    for transform in transforms:
+        if transform["type"] == "scale":
+            scale = transform["scale"]
+            pixel_size = {axis["name"]: (pixel_size, axis.get("unit", "")) for axis, pixel_size
+                          in zip(axes, scale) if axis["name"] in "xyz"}
+            break
 
+    pixels_type = array_data.dtype.name
+    return sizes, pixels_type, pixel_size
+
+def create_length(value_unit):
+    if len(value_unit) > 1 and value_unit[1]:
+        try:
+            return LengthI(value_unit[0], value_unit[1].upper())
+        except:
+            pass
+    return LengthI(value_unit[0])
+
+
+def set_pixel_size(image, pixel_size):
+    pixels = image.getPrimaryPixels()._obj
+    if "x" in pixel_size:
+        pixels.setPhysicalSizeX(create_length(pixel_size["x"]))
+    if "y" in pixel_size:
+        pixels.setPhysicalSizeY(create_length(pixel_size["y"]))
+    if "z" in pixel_size:
+        pixels.setPhysicalSizeZ(create_length(pixel_size["z"]))
 
 def create_image(
     conn: BlitzGateway,
@@ -153,7 +180,8 @@ def create_image(
     """
     query_service = conn.getQueryService()
     pixels_service = conn.getPixelsService()
-    sizes, pixels_type = parse_image_metadata(store, image_attrs, image_path)
+    sizes, pixels_type, pixel_size = parse_image_metadata(store, image_attrs,
+                                                          image_path)
     size_t = sizes.get("t", 1)
     size_z = sizes.get("z", 1)
     size_x = sizes.get("x", 1)
@@ -184,6 +212,7 @@ def create_image(
     )
 
     img_obj = image._obj
+
     set_external_info(img_obj, kwargs, image_path)
 
     return img_obj, rnd_def
