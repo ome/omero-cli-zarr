@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 import omero
 import zarr
 from numpy import finfo, iinfo
-from omero.gateway import BlitzGateway, ImageWrapper
+from omero.gateway import BlitzGateway, ImageWrapper, PixelsWrapper
 from omero.model import ExternalInfoI, LengthI
 from omero.model.enums import (
     PixelsTypecomplex,
@@ -36,6 +36,7 @@ from omero.model.enums import (
     PixelsTypeuint8,
     PixelsTypeuint16,
     PixelsTypeuint32,
+    UnitsLength,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring
 from zarr.core import Array
@@ -68,6 +69,8 @@ PIXELS_TYPE = {
     "complex_": PixelsTypecomplex,
     "complex64": PixelsTypecomplex,
 }
+
+UL = sorted(UnitsLength._enumerators.values())
 
 
 def get_omexml_bytes(store: zarr.storage.Store) -> Optional[bytes]:
@@ -150,17 +153,26 @@ def parse_image_metadata(
     return sizes, pixels_type, pixel_size
 
 
+def getUnitLength(value: str) -> Optional[UnitsLength]:
+    for unit in UL:
+        if unit.name.lower() == value:
+            return unit
+    return None
+
+
 def create_length(value_unit: Array) -> omero.model.LengthI:
     if len(value_unit) > 1 and value_unit[1]:
         try:
-            return LengthI(value_unit[0], value_unit[1].upper())
+            unit = getUnitLength(value_unit[1])
+            if unit is None:
+                return LengthI(value_unit[0], UnitsLength.PIXEL)
+            return LengthI(value_unit[0], unit)
         except TypeError:
             pass
-    return LengthI(value_unit[0])
+    return LengthI(value_unit[0], UnitsLength.PIXEL)
 
 
-def set_pixel_size(image: ImageWrapper, pixel_size: dict) -> None:
-    pixels = image.getPrimaryPixels()._obj
+def set_pixel_size(pixels: PixelsWrapper, pixel_size: dict) -> None:
     if "x" in pixel_size:
         pixels.setPhysicalSizeX(create_length(pixel_size["x"]))
     if "y" in pixel_size:
@@ -217,7 +229,8 @@ def create_image(
     )
 
     img_obj = image._obj
-    set_pixel_size(image, pixel_size)
+
+    set_pixel_size(image.getPrimaryPixels(), pixel_size)
 
     set_external_info(img_obj, kwargs, image_path)
 
@@ -587,7 +600,8 @@ def import_zarr(
                     )
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
-                    set_pixel_size(image._obj, pixel_size)
+
+                    set_pixel_size(image.getPrimaryPixels(), pixel_size)
                     set_external_info(image._obj, kwargs, image_path=image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
