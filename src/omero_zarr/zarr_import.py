@@ -140,12 +140,16 @@ def parse_image_metadata(
     for transform in transforms:
         if transform["type"] == "scale":
             scale = transform["scale"]
-            pixel_size = {axis["name"]: (pixel_size, axis.get("unit", "")) for axis, pixel_size
-                          in zip(axes, scale) if axis["name"] in "xyz"}
+            pixel_size = {
+                axis["name"]: (pixel_size, axis.get("unit", ""))
+                for axis, pixel_size in zip(axes, scale)
+                if axis["name"] in "xyz"
+            }
             break
 
     pixels_type = array_data.dtype.name
     return sizes, pixels_type, pixel_size
+
 
 def create_length(value_unit: Array) -> omero.model.LengthI:
     if len(value_unit) > 1 and value_unit[1]:
@@ -165,6 +169,7 @@ def set_pixel_size(image: ImageWrapper, pixel_size: dict) -> None:
     if "z" in pixel_size:
         pixels.setPhysicalSizeZ(create_length(pixel_size["z"]))
 
+
 def create_image(
     conn: BlitzGateway,
     store: zarr.storage.Store,
@@ -180,8 +185,9 @@ def create_image(
     """
     query_service = conn.getQueryService()
     pixels_service = conn.getPixelsService()
-    sizes, pixels_type, pixel_size = parse_image_metadata(store, image_attrs,
-                                                          image_path)
+    sizes, pixels_type, pixel_size = parse_image_metadata(
+        store, image_attrs, image_path
+    )
     size_t = sizes.get("t", 1)
     size_z = sizes.get("z", 1)
     size_x = sizes.get("x", 1)
