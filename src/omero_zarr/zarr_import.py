@@ -153,7 +153,7 @@ def parse_image_metadata(
     return sizes, pixels_type, pixel_size
 
 
-def getUnitLength(value: str) -> Optional[UnitsLength]:
+def get_unit_length(value: str) -> Optional[UnitsLength]:
     for unit in UL:
         if unit.name.lower() == value:
             return unit
@@ -163,7 +163,7 @@ def getUnitLength(value: str) -> Optional[UnitsLength]:
 def create_length(value_unit: Array) -> omero.model.LengthI:
     if len(value_unit) > 1 and value_unit[1]:
         try:
-            unit = getUnitLength(value_unit[1])
+            unit = get_unit_length(value_unit[1])
             if unit is None:
                 return LengthI(value_unit[0], UnitsLength.PIXEL)
             return LengthI(value_unit[0], unit)
