@@ -31,6 +31,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
     "6001240.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
         "dataset_name": "Test Import 6001240",
+        "pixel_sizes_x": [0.36],
     },
     "13457227.zarr": {
         "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457227.zarr",
