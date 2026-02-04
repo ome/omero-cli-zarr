@@ -37,13 +37,14 @@ from omero.model.enums import (
     PixelsTypeuint16,
     PixelsTypeuint32,
 )
-from omero.rtypes import rbool, rdouble, rint, rlong, rstring
+from omero.rtypes import rbool, rdouble, rint, rlong, rstring, rtime
 from zarr.core import Array
 from zarr.creation import open_array
 from zarr.errors import ArrayNotFoundError, GroupNotFoundError
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .import_labels import create_labels
 from .import_xml import full_import
 
 # TODO: support Zarr v3 - imports for get_omexml_bytes()
@@ -185,6 +186,9 @@ def create_image(
 
     img_obj = image._obj
     set_external_info(img_obj, kwargs, image_path)
+    if "labels" in kwargs and kwargs["labels"]:
+        print("Importing labels for image:", img_obj.id.val)
+        create_labels(conn, store, img_obj.id.val, image_path)
 
     return img_obj, rnd_def
 
@@ -376,6 +380,139 @@ def import_image(
     return image
 
 
+def determine_naming(values: list[dict]) -> str:
+    """
+    Determine the name of columns or rows of a plate
+    """
+    if len(values) > 0:
+        value = values[0]["name"]
+        if value.isdigit():
+            return "number"
+    return "letter"
+
+
+def create_plate_acquisition(pa: dict) -> omero.model.PlateAcquisitionI:
+    """
+    Create a plate acquisition object
+    """
+    plate_acquisition = omero.model.PlateAcquisitionI()
+    if pa.get("name"):
+        plate_acquisition.name = rstring(pa.get("name"))
+    else:
+        plate_acquisition.name = rstring(pa.get("id"))
+    if pa.get("maximumfieldcount"):
+        plate_acquisition.maximumFieldCount = rint(pa.get("maximumfieldcount"))
+    if pa.get("starttime"):
+        plate_acquisition.startTime = rtime(pa.get("starttime"))
+    if pa.get("endtime"):
+        plate_acquisition.endTime = rtime(pa.get("endtime"))
+    return plate_acquisition
+
+
+def import_plate(
+    conn: BlitzGateway, store: zarr.storage.Store, attrs: dict, kwargs: dict
+) -> omero.model.PlateI:
+    """
+    Create a plate in OMERO
+    """
+
+    plate_attrs = attrs["plate"]
+
+    object_name = kwargs.get("name", None)
+    if object_name is None:
+        object_name = plate_attrs.get("name", None)
+    if object_name is None:
+        object_name = kwargs["uri"].rstrip("/").split("/")[-1].split(".")[0]
+
+    update_service = conn.getUpdateService()
+    families = load_families(conn)
+    models = load_models(conn)
+
+    # Create a plate
+    plate = omero.model.PlateI()
+    plate.name = rstring(object_name)
+    plate.columnNamingConvention = rstring(determine_naming(plate_attrs["columns"]))
+    plate.rowNamingConvention = rstring(determine_naming(plate_attrs["rows"]))
+    plate.rows = rint(len(plate_attrs["rows"]))
+    plate.columns = rint(len(plate_attrs["columns"]))
+
+    acquisitions = plate_attrs.get("acquisitions")
+    plate_acquisitions = {}
+    if acquisitions is not None and len(acquisitions) > 1:
+        for pa in acquisitions:
+            plate_acquisition = create_plate_acquisition(pa)
+            plate.addPlateAcquisition(plate_acquisition)
+
+    plate = update_service.saveAndReturnObject(plate)
+    print("Plate created with id:", plate.id.val)
+
+    # load the new plate acquisitions and map them to the original IDs
+    if acquisitions is not None and len(acquisitions) > 1:
+        pwrapper = conn.getObject("Plate", plate.id.val)
+        pas = list(pwrapper.listPlateAcquisitions())
+        for pa, saved in zip(acquisitions, pas):
+            plate_acquisitions[pa["id"]] = saved.id
+        print("plate_acquisitions", plate_acquisitions)
+
+    # for bug in omero-cli-zarr - need to handle dupliate Wells!
+    well_paths = []
+
+    well_count = len(plate_attrs["wells"])
+    for well_index, well_attrs in enumerate(plate_attrs["wells"]):
+        images_to_save = []
+        rnd_defs = []
+        # read metadata
+        row_index = well_attrs["rowIndex"]
+        column_index = well_attrs["columnIndex"]
+        well_path = well_attrs["path"]
+        if well_path in well_paths:
+            continue
+        else:
+            well_paths.append(well_path)
+        print("well_path", well_path, f"({well_index}/{well_count})")
+        # create OMERO object
+        well = omero.model.WellI()
+        well.plate = omero.model.PlateI(plate.getId(), False)
+        well.column = rint(column_index)
+        well.row = rint(row_index)
+
+        well_attrs = load_attrs(store, well_path)
+        well_samples_attrs = well_attrs["well"]["images"]
+
+        for sample_attrs in well_samples_attrs:
+            image_path = f"{well_path}/{sample_attrs['path']}/"
+
+            img_attrs = load_attrs(store, image_path)
+            image_name = img_attrs.get("name", f"{well_path}/{sample_attrs['path']}")
+
+            image, rnd_def = create_image(
+                conn, store, img_attrs, image_name, families, models, kwargs, image_path
+            )
+
+            images_to_save.append(image)
+            if rnd_def is not None:
+                rnd_defs.append(rnd_def)
+            # Link well sample and plate acquisition
+            ws = omero.model.WellSampleI()
+            if "acquisition" in sample_attrs:
+                acquisition_id = sample_attrs["acquisition"]
+                pa_id = plate_acquisitions.get(acquisition_id)
+                if pa_id is not None:
+                    ws.plateAcquisition = omero.model.PlateAcquisitionI(pa_id, False)
+            ws.image = omero.model.ImageI(image.id.val, False)
+            ws.well = well
+            well.addWellSample(ws)
+
+        # Save each Well and Images as we go...
+        update_service.saveObject(well)
+        update_service.saveAndReturnArray(images_to_save)
+        if len(rnd_defs) > 0:
+            update_service.saveAndReturnIds(rnd_defs)
+
+    print("Plate created with id:", plate.id.val)
+    return plate
+
+
 def set_external_info(
     image: omero.model.ImageI,
     kwargs: dict,
@@ -524,9 +661,8 @@ def import_zarr(
     zattrs = load_attrs(store)
     objs = []
     if "plate" in zattrs:
-        print("Plate import not yet supported")
-        # objs = [import_plate(conn, store, zattrs, kwargs)]
-        return []
+        print("Importing: Plate")
+        objs = [import_plate(conn, store, zattrs, kwargs)]
     else:
         if zattrs.get("bioformats2raw.layout") == 3:
             print("Importing: bioformats2raw.layout")
@@ -554,6 +690,9 @@ def import_zarr(
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
                     set_external_info(image._obj, kwargs, image_path=image_path)
+                    if "labels" in kwargs and kwargs["labels"]:
+                        print("Importing labels for series:", series)
+                        create_labels(conn, store, image.id, image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
                     print("Imported Image:", image.id)
