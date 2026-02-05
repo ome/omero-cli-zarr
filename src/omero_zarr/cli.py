@@ -29,6 +29,7 @@ from omero.model import ImageI, PlateI
 from zarr.hierarchy import open_group
 from zarr.storage import FSStore
 
+from .kvp_tables import plate_to_table
 from .masks import (
     MASK_DTYPE_SIZE,
     MaskSaver,
@@ -202,15 +203,6 @@ class ZarrControl(BaseControl):
             help=("Name of the array that will be stored. Ignored for --style=split"),
             default="0",
         )
-        polygons.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How the existing Image or Plate zarr is named. Default 'id' is "
-                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
-            ),
-        )
 
         masks = parser.add(sub, self.masks, MASKS_HELP)
         masks.add_argument(
@@ -261,15 +253,6 @@ class ZarrControl(BaseControl):
                 "overlapping labels"
             ),
         )
-        masks.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How the existing Image or Plate zarr is named. Default 'id' is "
-                "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
-            ),
-        )
 
         export = parser.add(sub, self.export, EXPORT_HELP)
         export.add_argument(
@@ -305,23 +288,43 @@ class ZarrControl(BaseControl):
             help="Maximum number of workers (only for use with bioformats2raw)",
         )
         export.add_argument(
-            "--name_by",
-            default="id",
-            choices=["id", "name"],
-            help=(
-                "How to name the Image or Plate zarr. Default 'id' is [ID].ome.zarr. "
-                "'name' is [NAME].ome.zarr"
-            ),
-        )
-        export.add_argument(
             "object",
             type=ProxyStringType("Image"),
             help="The Image to export.",
         )
+        export.add_argument(
+            "--metadata_only",
+            action="store_true",
+            help="Only write metadata, do not export pixel data",
+        )
 
-        for subcommand in (polygons, masks, export):
+        # CSV export
+        csv = parser.add(sub, self.export_csv, "Export Key-Value pairs as csv")
+        csv.add_argument(
+            "object",
+            type=ProxyStringType("Image"),
+            help="The Plate from which to export Key-Value pairs.",
+        )
+
+        # Need same arguments for Images and Masks
+        for subcommand in (polygons, masks, export, csv):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
+            )
+            subcommand.add_argument(
+                "--skip_wells_map",
+                type=str,
+                help="For Plates, skip wells with MapAnnotation values"
+                "matching this key-value pair. e.g. 'MyKey:MyVal*'",
+            )
+            subcommand.add_argument(
+                "--name_by",
+                default="id",
+                choices=["id", "name"],
+                help=(
+                    "How to name the Image or Plate zarr. Default 'id' is "
+                    "[ID].ome.zarr. 'name' is [NAME].ome.zarr"
+                ),
             )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
@@ -405,6 +408,15 @@ class ZarrControl(BaseControl):
         elif isinstance(args.object, PlateI):
             plate = self._lookup(self.gateway, "Plate", args.object.id)
             plate_to_zarr(plate, args)
+
+    @gateway_required
+    def export_csv(self, args: argparse.Namespace) -> None:
+        """Export Image or Plate as a CSV file."""
+        print("export_csv...", isinstance(args.object, PlateI))
+        if isinstance(args.object, PlateI):
+            plate = self._lookup(self.gateway, "Plate", args.object.id)
+            self.ctx.out("Export Plate: %s" % plate.name)
+            plate_to_table(plate, args)
 
     @gateway_required
     def import_cmd(self, args: argparse.Namespace) -> None:
