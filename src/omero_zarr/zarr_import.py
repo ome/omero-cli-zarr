@@ -149,7 +149,7 @@ def get_unit_length(value: str) -> Optional[UnitsLength]:
     return None
 
 
-def create_length(value_unit: Array) -> omero.model.LengthI:
+def create_length(value_unit: list) -> omero.model.LengthI:
     if len(value_unit) > 1 and value_unit[1]:
         try:
             unit = get_unit_length(value_unit[1])
