@@ -86,6 +86,9 @@ To export Images or Plates via the OMERO API::
     # Plate will be saved in current directory as 2.ome.zarr
     $ omero zarr export Plate:2
 
+    # Specify the OME-Zarr format, e.g. 0.4. Default is 0.5
+    $ omero zarr --format 0.4 export Image:1
+
     # Use the Image or Plate 'name' to save e.g. my_image.ome.zarr
     $ omero zarr --name_by name export Image:1
 
@@ -96,7 +99,7 @@ To export Images or Plates via the OMERO API::
     $ omero zarr export Image:1 --tile_width 256 --tile_height 256
 
 
-NB: If the connection to OMERO is lost and the Image is partially exported,
+NB: If the connection to OMERO is lost and the Image or Plate is partially exported,
 re-running the command will attempt to complete the export.
 
 To export images via bioformats2raw we use the ```--bf``` flag::

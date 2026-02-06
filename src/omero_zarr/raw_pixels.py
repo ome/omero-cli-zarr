@@ -26,8 +26,13 @@ import dask.array as da
 import numpy as np
 import omero.clients  # noqa
 import omero.gateway  # required to allow 'from omero_zarr import raw_pixels'
+from numcodecs import Blosc
 from ome_zarr.dask_utils import resize as da_resize
+from ome_zarr.format import CurrentFormat, Format, format_from_version
+from ome_zarr.io import parse_url
 from ome_zarr.writer import (
+    add_metadata,
+    check_format,
     write_multiscales_metadata,
     write_plate_metadata,
     write_well_metadata,
@@ -44,27 +49,25 @@ from omero.model.enums import (
     PixelsTypeuint32,
 )
 from omero.rtypes import unwrap
-from zarr.hierarchy import Group, open_group
+from zarr.api.synchronous import open_group
+from zarr.core.group import Group
 
 from . import __version__
-from . import ngff_version as VERSION
-from .util import (
-    get_zarr_name,
-    marshal_axes,
-    marshal_transformations,
-    open_store,
-    print_status,
-)
+from .util import get_zarr_name, marshal_axes, marshal_transformations, print_status
 
 
 def image_to_zarr(image: omero.gateway.ImageWrapper, args: argparse.Namespace) -> None:
     tile_width = args.tile_width
     tile_height = args.tile_height
     name = get_zarr_name(image, args.output, args.name_by)
-    print(f"Exporting to {name} ({VERSION})")
-    store = open_store(name)
-    root = open_group(store)
-    add_image(image, root, tile_width=tile_width, tile_height=tile_height)
+    if args.format is not None:
+        fmt = format_from_version(args.format)
+    else:
+        fmt = CurrentFormat()
+    print(f"Exporting to {name} ({fmt.version})")
+    # store = parse_url(name, mode="w", fmt=fmt).store
+    root = open_group(name, mode="a", zarr_format=fmt.zarr_format)
+    add_image(image, root, tile_width=tile_width, tile_height=tile_height, fmt=fmt)
     add_omero_metadata(root, image)
     add_toplevel_metadata(root)
     print("Finished.")
@@ -75,6 +78,7 @@ def add_image(
     parent: Group,
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
+    fmt: Optional[Format] = None,
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Adds an OMERO image pixel data as array to the given parent zarr group.
     Returns the number of resolution levels generated for the image.
@@ -100,7 +104,7 @@ def add_image(
     for dataset, transform in zip(datasets, transformations):
         dataset["coordinateTransformations"] = transform
 
-    write_multiscales_metadata(parent, datasets, axes=axes)
+    write_multiscales_metadata(parent, fmt=fmt, datasets=datasets, axes=axes)
 
     return (level_count, axes)
 
@@ -112,6 +116,7 @@ def add_raw_image(
     tile_width: Optional[int] = None,
     tile_height: Optional[int] = None,
 ) -> List[str]:
+    fmt = check_format(parent)
     pixels = image.getPrimaryPixels()
     omero_dtype = image.getPixelsType()
     pixelTypes = {
@@ -152,12 +157,20 @@ def add_raw_image(
     dims = [dim for dim in [size_t, size_c, size_z] if dim != 1]
     shape = tuple(dims + [size_y, size_x])
     chunks = tuple([1] * len(dims) + [tile_height, tile_width])
-    zarray = parent.require_dataset(
+    kwargs = {}
+    dim_names = [ax["name"] for ax in marshal_axes(image)]
+    if fmt.zarr_format == 3:
+        kwargs["dimension_names"] = dim_names
+    else:
+        kwargs["compressor"] = Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
+    zarray = parent.require_array(
         path,
         shape=shape,
         exact=True,
         chunks=chunks,
         dtype=d_type,
+        chunk_key_encoding=fmt.chunk_key_encoding,
+        **kwargs,
     )
 
     # Need to be sure that dims match (if array already existed)
@@ -198,29 +211,32 @@ def add_raw_image(
                         if existing_data.max() == 0:
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
+                            print("----------------> Tile max:", tile.max())
                             zarray[tuple(indices)] = tile
 
     paths = [str(level) for level in range(level_count)]
 
-    downsample_pyramid_on_disk(parent, paths)
+    downsample_pyramid_on_disk(parent, paths, dim_names)
     return paths
 
 
-def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
+def downsample_pyramid_on_disk(
+    parent: Group, paths: List[str], dim_names: Optional[List[str]] = None
+) -> List[str]:
     """
     Takes a high-resolution Zarr array at paths[0] in the zarr group
     and down-samples it by a factor of 2 for each of the other paths
     """
-    group_path = parent.store.path
-    image_path = os.path.join(group_path, parent.path)
-    print("downsample_pyramid_on_disk", image_path)
+    group_path = str(parent.store_path)
+    fmt = check_format(parent)
+    print("downsample_pyramid_on_disk", group_path)
     for count, path in enumerate(paths[1:]):
-        target_path = os.path.join(image_path, path)
+        target_path = os.path.join(group_path, path)
         if os.path.exists(target_path):
             print("path exists: %s" % target_path)
             continue
         # open previous resolution from disk via dask...
-        path_to_array = os.path.join(image_path, paths[count])
+        path_to_array = os.path.join(group_path, paths[count])
         dask_image = da.from_zarr(path_to_array)
 
         # resize in X and Y
@@ -231,12 +247,21 @@ def downsample_pyramid_on_disk(parent: Group, paths: List[str]) -> List[str]:
             dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
         )
 
+        options = {"zarr_format": fmt.zarr_format}
+        if fmt.zarr_format == 2:
+            options["dimension_separator"] = "/"
+            options["compressor"] = Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
+        else:
+            options["chunk_key_encoding"] = fmt.chunk_key_encoding
+            if dim_names is not None:
+                options["dimension_names"] = dim_names
+
         # write to disk
         da.to_zarr(
             arr=output,
-            url=image_path,
+            url=parent.store_path,
             component=path,
-            dimension_separator=parent._store._dimension_separator,
+            **options,
         )
 
     return paths
@@ -270,9 +295,16 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
     total = n_rows * n_cols * (n_fields[1] - n_fields[0] + 1)
     name = get_zarr_name(plate, args.output, args.name_by)
 
-    store = open_store(name)
-    print(f"Exporting to {name} ({VERSION})")
+    # store = open_store(name)
+
+    if args.format is not None:
+        fmt = format_from_version(args.format)
+    else:
+        fmt = CurrentFormat()
+    # Use fmt=FormatV04() in parse_url() to write v0.4 format (zarr v2)
+    store = parse_url(name, mode="w", fmt=fmt).store
     root = open_group(store)
+    print(f"Exporting to {name} ({fmt.version})")
 
     count = 0
     max_fields = 0
@@ -310,7 +342,7 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
                     field_info["acquisition"] = ac.id
                 fields.append(field_info)
                 row_group = root.require_group(row)
-                col_group = row_group.require_group(col)
+                col_group = row_group.require_group(str(col))
                 field_group = col_group.require_group(field_name)
                 add_image(img, field_group)
                 add_omero_metadata(field_group, img)
@@ -337,22 +369,25 @@ def plate_to_zarr(plate: omero.gateway._PlateWrapper, args: argparse.Namespace) 
 
 
 def add_omero_metadata(zarr_root: Group, image: omero.gateway.ImageWrapper) -> None:
-    image_data = {
-        "id": 1,
+    fmt = check_format(zarr_root)
+    omero_data = {
         "channels": [channelMarshal(c) for c in image.getChannels()],
         "rdefs": {
             "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
             "defaultZ": image._re.getDefaultZ(),
             "defaultT": image._re.getDefaultT(),
         },
-        "version": VERSION,
     }
-    zarr_root.attrs["omero"] = image_data
+    if fmt.zarr_format == 2:
+        omero_data["version"] = fmt.version
+    add_metadata(zarr_root, {"omero": omero_data})
     image._closeRE()
 
 
 def add_toplevel_metadata(zarr_root: Group) -> None:
-    zarr_root.attrs["_creator"] = {"name": "omero-zarr", "version": __version__}
+    add_metadata(
+        zarr_root, {"_creator": {"name": "omero-zarr", "version": __version__}}
+    )
 
 
 def channelMarshal(channel: Channel) -> Dict[str, Any]:
