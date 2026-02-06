@@ -7,17 +7,47 @@
 OMERO CLI Zarr plugin
 =====================
 
-This OMERO command-line plugin allows you to export Images and Plates
-from OMERO as zarr files, according to the spec at
-https://github.com/ome/omero-ms-zarr/blob/master/spec.md
-as well as Masks associated with Images.
+This OMERO command-line plugin allows you to import and export
+Images and ROIs from OME-Zarr format into OMERO and vice versa.
 
-Images are nD arrays of shape, up to `(t, c, z, y, x)`.
+Import
+------
+
+NB: This feature currently works only with OME-Zarr files hosted
+on public object stores OR a local filesystem accessible to the OMERO server.
+
+The import process is similar to an "in-place" import; It does not move the
+data into OMERO. Instead the data is accessed via the
+`omero-zarr-pixel-buffer <https://github.com/glencoesoftware/omero-zarr-pixel-buffer>`_,
+which must be installed on the OMERO server.
+
+Images are created in OMERO and the link to the OME-Zarr data is stored in
+the `ExternalInfo` of the Image. Images are created in one of two ways:
+
+- If the OME-Zarr data is in the `bioformats2raw` layout, which includes an
+  `OME/METADATA.ome.xml` file, then this file is copied to the the server and
+  imported to create a Fileset and one or more Images. This preserves all of
+  the OME metadata in the xml file.
+
+- Otherwise, Images are created via the OMERO API, using the metadata
+  in the OME-Zarr files.
+
+Export
+------
+
+This feature supports export of any regular Images and Plates
+from OMERO into the OME-Zarr format, according to the spec at
+https://ngff.openmicroscopy.org/0.4/index.html
+as well as Masks and Polygons on the Images.
+
+Images are exported as nD arrays of shape, up to `(t, c, z, y, x)`.
 Plates are a hierarchy of `plate/row/column/field(image)`.
-Masks are 2D bitmasks which can exist on muliplte planes of an Image.
-In `ome-zarr` sets of Masks are collected together into "labels".
+Masks in OMERO are 2D bitmasks which can exist on multiple planes of an Image.
+Polygons are 2D shapes defined by a set of vertices. In both cases,
+they are exported as OME-Zarr `labels`, with Polygons being converted to
+bitmasks during export.
 
-It supports export using 2 alternative methods:
+Export is supported using 2 alternative methods:
 
 - By default the OMERO API is used to load planes as numpy arrays
   and the zarr file is created from this data.
@@ -30,8 +60,22 @@ It supports export using 2 alternative methods:
 Usage
 -------
 
-Images and Plates
-^^^^^^^^^^^^^^^^^
+Import OME-Zarr files
+^^^^^^^^^^^^^^^^^^^^^
+
+To import a public OME-Zarr data into OMERO, use the `import` command::
+
+    $ omero zarr import https://example.com/path/to/file.ome.zarr
+
+    # Use --target DATASET_ID to import into a Dataset
+    $ omero zarr import https://example.com/path/to/file.ome.zarr --target 1234
+
+    # Or import local data which must be accessible to the OMERO server
+    $ omero zarr import /path/to/file.ome.zarr
+
+
+Export Images and Plates
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 To export Images or Plates via the OMERO API::
 
@@ -63,8 +107,8 @@ To export images via bioformats2raw we use the ```--bf``` flag::
     $ omero zarr --output /home/user/zarr_files export 1 --bf
     Image exported to /home/user/zarr_files/2chZT.lsm
 
-Masks and Polygons
-^^^^^^^^^^^^^^^^^^
+Export Masks and Polygons
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To export Masks or Polygons for an Image or Plate, use the `masks` or `polygons` command::
 
