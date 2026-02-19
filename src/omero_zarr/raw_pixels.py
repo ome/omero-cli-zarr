@@ -247,21 +247,26 @@ def downsample_pyramid_on_disk(
             dask_image, tuple(dims), preserve_range=True, anti_aliasing=False
         )
 
-        options = {"zarr_format": fmt.zarr_format}
+        zarr_array_kwargs: Dict[str, Any] = {}
         if fmt.zarr_format == 2:
-            options["dimension_separator"] = "/"
-            options["compressor"] = Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
+            zarr_array_kwargs["chunk_key_encoding"] = {
+                "name": "v2",
+                "separator": "/",
+            }
+            zarr_array_kwargs["compressor"] = Blosc(
+                cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE
+            )
         else:
-            options["chunk_key_encoding"] = fmt.chunk_key_encoding
+            zarr_array_kwargs["chunk_key_encoding"] = fmt.chunk_key_encoding
             if dim_names is not None:
-                options["dimension_names"] = dim_names
+                zarr_array_kwargs["dimension_names"] = dim_names
 
         # write to disk
         da.to_zarr(
             arr=output,
             url=parent.store_path,
             component=path,
-            **options,
+            zarr_array_kwargs=zarr_array_kwargs,
         )
 
     return paths
