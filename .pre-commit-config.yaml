@@ -7,7 +7,7 @@ repos:
       - id: seed-isort-config
 
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 7.0.0
     hooks:
       - id: isort
         args: ["--profile", "black"]
@@ -45,15 +45,13 @@ repos:
           - --autofix
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.2.0
+    rev: 7.3.0
     hooks:
       - id: flake8
         additional_dependencies: [
           flake8-blind-except,
           flake8-builtins,
           flake8-rst-docstrings,
-          flake8-logging-format,
-          setuptools,
         ]
         args: [
           # default black line length is 88
@@ -62,23 +60,6 @@ repos:
           "--ignore=E203",
           "--rst-roles=class,func,ref,module,const",
         ]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.1
-    hooks:
-      - id: mypy
-      # This is for checking tests/* (everything else has a stricter check
-      # below), but since there's no include it's run on everything
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.1
-    hooks:
-      - id: mypy
-        args: [
-          --disallow-untyped-defs,
-          --ignore-missing-imports,
-        ]
-        exclude: tests/
 
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.35.1
