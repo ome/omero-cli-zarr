@@ -211,7 +211,6 @@ def add_raw_image(
                         if existing_data.max() == 0:
                             print("loading Tile...")
                             tile = pixels.getTile(z, c, t, tile_dims)
-                            print("----------------> Tile max:", tile.max())
                             zarray[tuple(indices)] = tile
 
     paths = [str(level) for level in range(level_count)]
