@@ -26,8 +26,8 @@ from typing import Any, Callable, List
 from omero.cli import CLI, BaseControl, Parser, ProxyStringType
 from omero.gateway import BlitzGateway, BlitzObjectWrapper
 from omero.model import ImageI, PlateI
-from zarr.hierarchy import open_group
-from zarr.storage import FSStore
+from zarr.api.synchronous import open_group
+from zarr.storage import LocalStore
 
 from .masks import (
     MASK_DTYPE_SIZE,
@@ -323,6 +323,12 @@ class ZarrControl(BaseControl):
             subcommand.add_argument(
                 "--output", type=str, default="", help="The output directory"
             )
+            subcommand.add_argument(
+                "--format",
+                type=str,
+                choices=["0.4", "0.5"],
+                help="OME-Zarr version. Default is '0.5'",
+            )
         for subcommand in (polygons, masks):
             subcommand.add_argument(
                 "--overlaps",
@@ -399,6 +405,12 @@ class ZarrControl(BaseControl):
         if isinstance(args.object, ImageI):
             image = self._lookup(self.gateway, "Image", args.object.id)
             if args.bf or args.bfpath:
+                if args.format and args.format != "0.4":
+                    self.ctx.die(
+                        110,
+                        "bioformats2raw does not support OME-Zarr format %s"
+                        % args.format,
+                    )
                 self._bf_export(image, args)
             else:
                 image_to_zarr(image, args)
@@ -484,7 +496,7 @@ class ZarrControl(BaseControl):
             self.ctx.out(f"Image exported to {image_target.resolve()}")
 
         # Add OMERO metadata
-        store = FSStore(
+        store = LocalStore(
             str(image_target.resolve()),
             auto_mkdir=False,
             normalize_keys=False,
