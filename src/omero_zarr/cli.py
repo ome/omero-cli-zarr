@@ -355,6 +355,13 @@ class ZarrControl(BaseControl):
             "--nosignrequest", action="store_true", help="Indicate to sign anonymously"
         )
         import_cmd.add_argument(
+            "--parseuri",
+            action="store_true",
+            help="Try to parse the URI to extract endpoint, bucket and path "
+            "in order to  create a S3 URI (e.g. from an HTTP URI) "
+            "(default: Just use the URI as-is)",
+        )
+        import_cmd.add_argument(
             "--target",
             type=str,
             help=(
@@ -426,6 +433,7 @@ class ZarrControl(BaseControl):
             uri=args.uri,
             endpoint=args.endpoint,
             nosignrequest=args.nosignrequest,
+            parseuri=args.parseuri,
             name=args.name,
             target=args.target,
             target_by_name=args.target_by_name,
