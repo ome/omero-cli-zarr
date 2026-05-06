@@ -551,7 +551,8 @@ def import_zarr(
         if endpoint:
             storage_options["client_kwargs"] = {"endpoint_url": endpoint}
 
-        args["storage_options"] = storage_options
+        if len(storage_options) > 0:
+            args["storage_options"] = storage_options
 
     root_group = open_group(uri, mode="r", **args)
     store = root_group.store
