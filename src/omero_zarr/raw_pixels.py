@@ -265,7 +265,7 @@ def downsample_pyramid_on_disk(
             arr=output,
             url=parent.store_path,
             component=path,
-            zarr_array_kwargs=zarr_array_kwargs,
+            **zarr_array_kwargs,
         )
 
     return paths
