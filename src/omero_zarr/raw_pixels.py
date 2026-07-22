@@ -252,9 +252,7 @@ def downsample_pyramid_on_disk(
                 "name": "v2",
                 "separator": "/",
             }
-            zarr_array_kwargs["compressor"] = Blosc(
-                cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE
-            )
+            zarr_array_kwargs["zarr_format"] = 2
         else:
             zarr_array_kwargs["chunk_key_encoding"] = fmt.chunk_key_encoding
             if dim_names is not None:
