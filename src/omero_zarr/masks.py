@@ -117,6 +117,13 @@ def plate_shapes_to_zarr(
 
 
 def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
+    """
+    Generate a label map from the given masks and label map argument.
+
+    @param masks: Dictionary of masks
+    @param label_map_arg: Path to the label map file
+    @return: Dictionary {name: List[masks]} mapping label names to masks
+    """
     label_map = defaultdict(list)
     roi_map = {}
     for roi_id, roi in masks.items():
@@ -135,6 +142,9 @@ def get_label_map(masks: Dict, label_map_arg: str) -> Dict:
 
 
 def get_shapes(image: omero.gateway.ImageWrapper, shape_types: List[str]) -> Dict:
+    """
+    Returns dict of {roi_id: [shapes]} for "Mask" or "Polygon" shapes on the Image
+    """
     shape_classes = []
     for klass in shape_types:
         if klass in SHAPE_TYPES:

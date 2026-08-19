@@ -304,7 +304,7 @@ class TestExport(AbstractCLITest):
             labels_json = labels_json.get("attributes", {}).get("ome")
         assert labels_json["image-label"]["colors"] == [{"label-value": 1, "rgba": red}]
 
-        arr_text = (tmp_path / zarr_name / "labels" / "0" / "0" / arr_name).read_text(
+        arr_text = (tmp_path / zarr_name / "labels" / "0" / "s0" / arr_name).read_text(
             encoding="utf-8"
         )
         arr_json = json.loads(arr_text)
