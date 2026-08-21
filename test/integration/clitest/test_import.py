@@ -29,25 +29,25 @@ from omero_zarr.zarr_import import import_zarr
 
 SAMPLES: Dict[str, Dict[str, Any]] = {
     "6001240.zarr": {
-        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
+        "url": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr",
         "dataset_name": "Test Import 6001240",
         "pixel_sizes_x": [0.36],
     },
     # zarr_v3 sample
     "6001240_labels.zarr": {
         "url": (
-            "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.5/"
+            "https://livingobjects.ebi.ac.uk/idr/zarr/v0.5/"
             "idr0062A/6001240_labels.zarr"
         ),
         "dataset_name": "Test Import 6001240",
         "pixel_sizes_x": [0.36],
     },
     "13457227.zarr": {
-        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457227.zarr",
+        "url": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457227.zarr",
     },
     "13457227.zarr (s3)": {
         "url": "s3://idr/zarr/v0.4/idr0101A/13457227.zarr",
-        "args": "--endpoint https://uk1s3.embassy.ebi.ac.uk/ --nosignrequest",
+        "args": "--endpoint https://livingobjects.ebi.ac.uk/ --nosignrequest",
     },
     "CMU-1.ome.zarr": {
         "url": (
@@ -72,7 +72,7 @@ SAMPLES: Dict[str, Dict[str, Any]] = {
         "dataset_name": "Test Import LacZ_ctrl.zarr",
     },
     "9846151.zarr": {
-        "url": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0048A/9846151.zarr/",
+        "url": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0048A/9846151.zarr/",
     },
 }
 
