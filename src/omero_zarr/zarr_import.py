@@ -24,8 +24,8 @@ from urllib.parse import urlsplit
 import omero
 import zarr
 from numpy import finfo, iinfo
-from omero.gateway import BlitzGateway, ImageWrapper
-from omero.model import ExternalInfoI
+from omero.gateway import BlitzGateway, ImageWrapper, PixelsWrapper
+from omero.model import ExternalInfoI, LengthI
 from omero.model.enums import (
     PixelsTypecomplex,
     PixelsTypedouble,
@@ -36,21 +36,18 @@ from omero.model.enums import (
     PixelsTypeuint8,
     PixelsTypeuint16,
     PixelsTypeuint32,
+    UnitsLength,
 )
 from omero.rtypes import rbool, rdouble, rint, rlong, rstring, rtime
-from zarr.core import Array
-from zarr.creation import open_array
+from zarr.api.synchronous import open_array, open_group
+
+# TODO: support Zarr v3 - imports for get_omexml_bytes()
+from zarr.core.buffer import default_buffer_prototype
+from zarr.core.sync import sync
 from zarr.errors import ArrayNotFoundError, GroupNotFoundError
-from zarr.hierarchy import open_group
-from zarr.storage import FSStore
 
 from .import_labels import create_labels
 from .import_xml import full_import
-
-# TODO: support Zarr v3 - imports for get_omexml_bytes()
-# from zarr.core.buffer import default_buffer_prototype
-# from zarr.core.sync import sync
-
 
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
 
@@ -70,17 +67,16 @@ PIXELS_TYPE = {
     "complex64": PixelsTypecomplex,
 }
 
+UL = sorted(UnitsLength._enumerators.values())
 
-def get_omexml_bytes(store: zarr.storage.Store) -> Optional[bytes]:
+
+def get_omexml_bytes(store: zarr.storage.StoreLike) -> Optional[bytes]:
     # Zarr v3 get() is async. Need to sync to get the bytes
-    # rsp = store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype())
-    # result = sync(rsp)
-    # if result is None:
-    #     return None
-    # return result.to_bytes()
-
-    # Zarr v2
-    return store.get("OME/METADATA.ome.xml")
+    rsp = store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype())
+    result = sync(rsp)
+    if result is None:
+        return None
+    return result.to_bytes()
 
 
 def format_s3_uri(uri: str, endpoint: str) -> str:
@@ -97,10 +93,6 @@ def format_s3_uri(uri: str, endpoint: str) -> str:
     return f"{parsed_uri.scheme}" + "://" + endpoint + "/" + url + f"{parsed_uri.path}"
 
 
-def load_array(store: zarr.storage.Store, path: Optional[str] = None) -> Array:
-    return open_array(store=store, mode="r", path=path)
-
-
 def load_attrs(store: zarr.storage.StoreLike, path: Optional[str] = None) -> dict:
     """
     Load the attrs from the root group or path subgroup
@@ -113,7 +105,7 @@ def load_attrs(store: zarr.storage.StoreLike, path: Optional[str] = None) -> dic
 
 
 def parse_image_metadata(
-    store: zarr.storage.Store, img_attrs: dict, image_path: Optional[str] = None
+    store: zarr.storage.StoreLike, img_attrs: dict, image_path: Optional[str] = None
 ) -> tuple:
     """
     Parse the image metadata
@@ -123,7 +115,7 @@ def parse_image_metadata(
     if image_path is not None:
         array_path = image_path.rstrip("/") + "/" + array_path
     # load .zarray from path to know the dimension
-    array_data = load_array(store, array_path)
+    array_data = open_array(store=store, mode="r", path=array_path)
     sizes = {}
     shape = array_data.shape
     axes = multiscale_attrs.get("axes")
@@ -135,13 +127,53 @@ def parse_image_metadata(
             else:
                 sizes[axis["name"]] = size
 
+    pixel_size = {}
+    transforms = multiscale_attrs["datasets"][0]["coordinateTransformations"]
+    for transform in transforms:
+        if transform["type"] == "scale":
+            scale = transform["scale"]
+            pixel_size = {
+                axis["name"]: (pixel_size, axis.get("unit", ""))
+                for axis, pixel_size in zip(axes, scale)
+                if axis["name"] in "xyz"
+            }
+            break
+
     pixels_type = array_data.dtype.name
-    return sizes, pixels_type
+    return sizes, pixels_type, pixel_size
+
+
+def get_unit_length(value: str) -> Optional[UnitsLength]:
+    for unit in UL:
+        if unit.name.lower() == value:
+            return unit
+    return None
+
+
+def create_length(value_unit: list) -> omero.model.LengthI:
+    if len(value_unit) > 1 and value_unit[1]:
+        try:
+            unit = get_unit_length(value_unit[1])
+            if unit is None:
+                return LengthI(value_unit[0], UnitsLength.PIXEL)
+            return LengthI(value_unit[0], unit)
+        except TypeError:
+            pass
+    return LengthI(value_unit[0], UnitsLength.PIXEL)
+
+
+def set_pixel_size(pixels: PixelsWrapper, pixel_size: dict) -> None:
+    if "x" in pixel_size:
+        pixels.setPhysicalSizeX(create_length(pixel_size["x"]))
+    if "y" in pixel_size:
+        pixels.setPhysicalSizeY(create_length(pixel_size["y"]))
+    if "z" in pixel_size:
+        pixels.setPhysicalSizeZ(create_length(pixel_size["z"]))
 
 
 def create_image(
     conn: BlitzGateway,
-    store: zarr.storage.Store,
+    store: zarr.storage.StoreLike,
     image_attrs: dict,
     object_name: str,
     families: list,
@@ -154,7 +186,9 @@ def create_image(
     """
     query_service = conn.getQueryService()
     pixels_service = conn.getPixelsService()
-    sizes, pixels_type = parse_image_metadata(store, image_attrs, image_path)
+    sizes, pixels_type, pixel_size = parse_image_metadata(
+        store, image_attrs, image_path
+    )
     size_t = sizes.get("t", 1)
     size_z = sizes.get("z", 1)
     size_x = sizes.get("x", 1)
@@ -185,6 +219,9 @@ def create_image(
     )
 
     img_obj = image._obj
+
+    set_pixel_size(image.getPrimaryPixels(), pixel_size)
+
     set_external_info(img_obj, kwargs, image_path)
     if "labels" in kwargs and kwargs["labels"]:
         print("Importing labels for image:", img_obj.id.val)
@@ -339,7 +376,7 @@ def load_models(conn: BlitzGateway) -> list:
 
 def import_image(
     conn: BlitzGateway,
-    store: zarr.storage.Store,
+    store: zarr.storage.StoreLike,
     kwargs: dict,
     img_attrs: Optional[dict] = None,
     image_path: Optional[str] = None,
@@ -604,8 +641,9 @@ def link_to_target(
         if len(objs) == 0:
             print("Target not found")
             return
-        # If multiple targets match by name, use the first one
-        target = objs[0]
+        # If multiple targets match by name, use the last one (most recently created)
+        objs.sort(key=lambda x: x.getId())
+        target = objs[-1]
 
     if target is None:
         print("Target not found")
@@ -639,10 +677,10 @@ def import_zarr(
     nosignrequest = kwargs.get("nosignrequest", False)
     validate_endpoint(endpoint)
     store = None
-    if uri.startswith("/"):
-        # store = zarr.storage.LocalStore(uri, read_only=True)
-        store = zarr.storage.NestedDirectoryStore(uri)
-    else:
+    args = {}
+
+    # Let zarr create the store based on the uri
+    if not uri.startswith("/"):
         storage_options: Dict[str, Any] = {}
         if nosignrequest:
             storage_options["anon"] = True
@@ -650,12 +688,11 @@ def import_zarr(
         if endpoint:
             storage_options["client_kwargs"] = {"endpoint_url": endpoint}
 
-        # if FsspecStore is not None:
-        #     store = FsspecStore.from_url(
-        #         uri, read_only=True, storage_options=storage_options
-        #     )
-        # else:
-        store = FSStore(uri, mode="r", **storage_options)
+        if len(storage_options) > 0:
+            args["storage_options"] = storage_options
+
+    root_group = open_group(uri, mode="r", **args)
+    store = root_group.store
 
     zattrs = load_attrs(store)
     objs = []
@@ -680,7 +717,7 @@ def import_zarr(
                     image_path = str(series)
                     image_attrs = load_attrs(store, image_path)
                     # pixels_type is only used if we have *incomplete* `omero` metadata
-                    sizes, pixels_type = parse_image_metadata(
+                    sizes, pixels_type, pixel_size = parse_image_metadata(
                         store, image_attrs, image_path
                     )
                     rnd_def = set_rendering_settings(
@@ -688,6 +725,8 @@ def import_zarr(
                     )
                     if rnd_def is not None:
                         conn.getUpdateService().saveAndReturnObject(rnd_def)
+
+                    set_pixel_size(image.getPrimaryPixels(), pixel_size)
                     set_external_info(image._obj, kwargs, image_path=image_path)
                     if "labels" in kwargs and kwargs["labels"]:
                         print("Importing labels for series:", series)
