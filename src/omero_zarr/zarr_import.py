@@ -46,7 +46,6 @@ from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import sync
 from zarr.errors import ArrayNotFoundError, GroupNotFoundError
 
-from .import_labels import create_labels
 from .import_xml import full_import
 
 AWS_DEFAULT_ENDPOINT = "s3.us-east-1.amazonaws.com"
@@ -223,9 +222,6 @@ def create_image(
     set_pixel_size(image.getPrimaryPixels(), pixel_size)
 
     set_external_info(img_obj, kwargs, image_path)
-    if "labels" in kwargs and kwargs["labels"]:
-        print("Importing labels for image:", img_obj.id.val)
-        create_labels(conn, store, img_obj.id.val, image_path)
 
     return img_obj, rnd_def
 
@@ -728,9 +724,6 @@ def import_zarr(
 
                     set_pixel_size(image.getPrimaryPixels(), pixel_size)
                     set_external_info(image._obj, kwargs, image_path=image_path)
-                    if "labels" in kwargs and kwargs["labels"]:
-                        print("Importing labels for series:", series)
-                        create_labels(conn, store, image.id, image_path)
                     # default name is METADATA.ome.xml [series], based on clientPath?
                     new_name = image.name.replace("METADATA.ome.xml", zarr_name)
                     print("Imported Image:", image.id)
