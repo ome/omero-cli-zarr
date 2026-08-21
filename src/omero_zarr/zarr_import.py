@@ -443,7 +443,7 @@ def create_plate_acquisition(pa: dict) -> omero.model.PlateAcquisitionI:
 
 
 def import_plate(
-    conn: BlitzGateway, store: zarr.storage.Store, attrs: dict, kwargs: dict
+    conn: BlitzGateway, store: zarr.storage.StoreLike, attrs: dict, kwargs: dict
 ) -> omero.model.PlateI:
     """
     Create a plate in OMERO
